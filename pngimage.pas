@@ -1,13 +1,27 @@
-{Portable Network Graphics Delphi 1.53      (14 April 2006)   }
+{Portable Network Graphics Delphi 1.56        (09 May 2006)   }
 
-{This is a full, open sourced implementation for png in Delphi}
+{This is a full, open sourced implementation of png in Delphi }
 {It has native support for most of png features including the }
 {partial transparency, gamma and more.                        }
 {For the latest version, please be sure to check my website   }
 {http://pngdelphi.sourceforge.net                             }
 {Gustavo Huffenbacher Daud (gustavo.daud@terra.com.br)        }
 
+
+{$OPTIMIZATION OFF}
 {
+  Version 1.56
+  2006-05-09 - IMPROVE 1 - Delphi standard TCanvas support is now implemented
+               IMPROVE 2 - The PNG files may now be resized and created from
+                           scratch using CreateBlank, Resize, Width and Height
+               BUG 1     - Fixed some bugs on handling tRNS transparencies
+               BUG 2     - Fixed bugs related to palette handling
+
+  Version 1.535
+  2006-04-21 - IMPROVE 1 - Now the library uses the latest ZLIB release (1.2.3)
+                           (thanks to: Roberto Della Pasqua
+                           http://www.dellapasqua.com/delphizlib/)
+
   Version 1.53
   2006-04-14 -
                BUG 1 - Remove transparency was not working for
@@ -133,13 +147,13 @@
                New translation for Brazilian Portuguese.
                Bugs fixed.
 
- IMPORTANT: I'm currently looking for bugs on the library. If
+ IMPORTANT: As always I´m looking for bugs on the library. If
             anyone has found one, please send me an email and
-            I will fix right away. Thanks for all the help and
-            ideias I'm receiving so far.}
+            I will fix asap. Thanks for all the help and ideas
+            I'm receiving so far.}
 
-{My new email is: gubadaud@terra.com.br}
-{Website link   : pngdelphi.sourceforge.net}
+{My email is    : gustavo.daud@terra.com.br}
+{Website link   : http://pngdelphi.sourceforge.net}
 {Gustavo Huffenbacher Daud}
 
 unit pngimage;
@@ -154,7 +168,7 @@ interface
 {$DEFINE CheckCRC}               //Enables CRC checking
 {$DEFINE RegisterGraphic}        //Registers TPNGObject to use with TPicture
 {$DEFINE PartialTransparentDraw} //Draws partial transparent images
-{.$DEFINE Store16bits}           //Stores the extra 8 bits from 16bits/sample
+{$DEFINE Store16bits}           //Stores the extra 8 bits from 16bits/sample
 {.$DEFINE Debug}                 //For programming purposes
 {$RANGECHECKS OFF} {$J+}
 
@@ -165,7 +179,7 @@ uses
  dialogs{$ENDIF}, pngzlib, pnglang;
 
 const
-  LibraryVersion = '1.53';
+  LibraryVersion = '1.56';
 
 {$IFNDEF UseDelphi}
   const
@@ -230,6 +244,8 @@ type
   EPNGCouldNotLoadResource = class(Exception);
   EPNGCannotChangeTransparent = class(Exception);
   EPNGHeaderNotPresent = class(Exception);
+  EPNGInvalidNewSize = class(Exception);
+  EPNGInvalidSpec = class(Exception);
 
 type
   {Direct access to pixels using R,G,B}
@@ -408,8 +424,8 @@ type
     InverseGamma: Array[Byte] of Byte;
     procedure InitializeGamma;
   private
-    {Temporary palette}
-    TempPalette: HPalette;
+    {Canvas}
+    {$IFDEF UseDelphi}fCanvas: TCanvas;{$ENDIF}
     {Filters to test to encode}
     fFilters: TFilters;
     {Compression level for ZLIB}
@@ -439,6 +455,8 @@ type
     {Returns the version}
     function GetLibraryVersion: String;
   protected
+    {Being created}
+    BeingCreated: Boolean;
     {Returns / set the image palette}
     function GetPalette: HPALETTE; {$IFDEF UseDelphi}override;{$ENDIF}
     procedure SetPalette(Value: HPALETTE); {$IFDEF UseDelphi}override;{$ENDIF}
@@ -465,6 +483,8 @@ type
   public
     {Gamma table array}
     GammaTable: Array[Byte] of Byte;
+    {Resizes the PNG image}
+    procedure Resize(const CX, CY: Integer);
     {Generates alpha information}
     procedure CreateAlpha;
     {Removes the image transparency}
@@ -496,6 +516,8 @@ type
       GetAlphaScanline;
     procedure DrawUsingPixelInformation(Canvas: TCanvas; Point: TPoint);
 
+    {Canvas}
+    {$IFDEF UseDelphi}property Canvas: TCanvas read fCanvas;{$ENDIF}
     {Returns pointer to the header}
     property Header: TChunkIHDR read GetHeader;
     {Returns the transparency mode used by this png}
@@ -529,6 +551,7 @@ type
     property Chunks: TPngList read fChunkList;
     {Object being created and destroyed}
     constructor Create; {$IFDEF UseDelphi}override;{$ENDIF}
+    constructor CreateBlank(ColorType, Bitdepth: Cardinal; cx, cy: Integer);
     destructor Destroy; override;
     {$IFNDEF UseDelphi}procedure LoadFromFile(const Filename: String);{$ENDIF}
     {$IFNDEF UseDelphi}procedure SaveToFile(const Filename: String);{$ENDIF}
@@ -615,10 +638,10 @@ type
     {Current image}
     ImageHandle: HBitmap;
     ImageDC: HDC;
+    ImagePalette: HPalette;
     {Output windows bitmap}
     HasPalette: Boolean;
     BitmapInfo: TMaxBitmapInfo;
-    BytesPerRow: Integer;
     {Stores the image bytes}
     {$IFDEF Store16bits}ExtraImageData: Pointer;{$ENDIF}
     ImageData: pointer;
@@ -627,6 +650,11 @@ type
     {Contains all the ihdr data}
     IHDRData: TIHDRData;
   protected
+    BytesPerRow: Integer;
+    {Creates a grayscale palette}
+    function CreateGrayscalePalette(Bitdepth: Integer): HPalette;
+    {Copies the palette to the Device Independent bitmap header}
+    procedure PaletteToDIB(Palette: HPalette);
     {Resizes the image data to fill the color type, bit depth, }
     {width and height parameters}
     procedure PrepareImageData;
@@ -708,9 +736,10 @@ type
 
   {Palette chunk}
   TChunkPLTE = class(TChunk)
-  private
+  protected
     {Number of items in the palette}
     fCount: Integer;
+  private
     {Contains the palette handle}
     function GetPaletteItem(Index: Byte): TRGBQuad;
   public
@@ -887,6 +916,8 @@ type
       Size: Integer): Boolean; override;
     {Saves the chunk to a stream}
     function SaveToStream(Stream: TStream): Boolean; override;
+    {Assigns from another TChunk}
+    procedure Assign(Source: TChunk); override;
   end;
 
   {Textual data}
@@ -1480,7 +1511,7 @@ end;
 {Inserts a new item in the list}
 procedure TPngPointerList.Insert(Value: Pointer; Position: Cardinal);
 begin
-  if (Position < Count) then
+  if (Position < Count) or (Count = 0) then
   begin
     {Increase item count}
     SetSize(Count + 1);
@@ -1555,8 +1586,9 @@ var
 begin
   Result := nil; {Default result}
   {Adding these is not allowed}
-  if (ChunkClass = TChunkIHDR) or (ChunkClass = TChunkIDAT) or
-    (ChunkClass = TChunkPLTE) or (ChunkClass = TChunkIEND) then
+  if ((ChunkClass = TChunkIHDR) or (ChunkClass = TChunkIDAT) or
+    (ChunkClass = TChunkPLTE) or (ChunkClass = TChunkIEND)) and not
+    (Owner.BeingCreated) then
     fOwner.RaiseError(EPngError, EPNGCannotAddChunkText)
   {Two of these is not allowed}
   else if ((ChunkClass = TChunkgAMA) and (ItemFromClass(TChunkgAMA) <> nil)) or
@@ -1564,8 +1596,8 @@ begin
      ((ChunkClass = TChunkpHYs) and (ItemFromClass(TChunkpHYs) <> nil)) then
     fOwner.RaiseError(EPngError, EPNGCannotAddChunkText)
   {There must have an IEND and IHDR chunk}
-  else if (ItemFromClass(TChunkIEND) = nil) or
-    (ItemFromClass(TChunkIHDR) = nil) then
+  else if ((ItemFromClass(TChunkIEND) = nil) or
+    (ItemFromClass(TChunkIHDR) = nil)) and not Owner.BeingCreated then
     fOwner.RaiseError(EPngError, EPNGCannotAddInvalidImageText)
   else
   begin
@@ -1575,8 +1607,14 @@ begin
     {Create new chunk}
     Result := ChunkClass.Create(Owner);
     {Add to the list}
-    if (ChunkClass = TChunkgAMA) or (ChunkClass = TChunkpHYs) then
+    if (ChunkClass = TChunkgAMA) or (ChunkClass = TChunkpHYs) or
+      (ChunkClass = TChunkPLTE) then
       Insert(Result, IHDR.Index + 1)
+    {Header and end}
+    else if (ChunkClass = TChunkIEND) then
+      Insert(Result, Count)
+    else if (ChunkClass = TChunkIHDR) then
+      Insert(Result, 0)
     {Transparency chunk (fix by Ian Boyd)}
     else if (ChunkClass = TChunktRNS) then
     begin
@@ -1966,12 +2004,23 @@ begin
   fSecond := pByte(Longint(Data) + 6)^;
 end;
 
+{Assigns from another TChunk}
+procedure TChunktIME.Assign(Source: TChunk);
+begin
+  fYear := TChunktIME(Source).fYear;
+  fMonth := TChunktIME(Source).fMonth;
+  fDay := TChunktIME(Source).fDay;
+  fHour := TChunktIME(Source).fHour;
+  fMinute := TChunktIME(Source).fMinute;
+  fSecond := TChunktIME(Source).fSecond;
+end;
+
 {Saving the chunk to a stream}
 function TChunktIME.SaveToStream(Stream: TStream): Boolean;
 begin
   {Update data}
   ResizeData(7);  {Make sure the size is 7}
-  pWord(Data)^ := Year;
+  pWord(Data)^ := ByteSwap16(Year);
   pByte(Longint(Data) + 2)^ := Month;
   pByte(Longint(Data) + 3)^ := Day;
   pByte(Longint(Data) + 4)^ := Hour;
@@ -2103,6 +2152,7 @@ begin
   inherited Create(Owner);
   {Prepare pointers}
   ImageHandle := 0;
+  ImagePalette := 0;
   ImageDC := 0;
 end;
 
@@ -2149,10 +2199,12 @@ begin
   if ImageHandle <> 0  then DeleteObject(ImageHandle);
   if ImageDC     <> 0  then DeleteDC(ImageDC);
   if ImageAlpha <> nil then FreeMem(ImageAlpha);
+  if ImagePalette <> 0 then DeleteDC(ImagePalette);
   {$IFDEF Store16bits}
   if ExtraImageData <> nil then FreeMem(ExtraImageData);
   {$ENDIF}
   ImageHandle := 0; ImageDC := 0; ImageAlpha := nil; ImageData := nil;
+  ImagePalette := 0;
 end;
 
 {Chunk being loaded from a stream}
@@ -2228,18 +2280,56 @@ begin
   Result := inherited SaveToStream(Stream);
 end;
 
+{Creates a grayscale palette}
+function TChunkIHDR.CreateGrayscalePalette(Bitdepth: Integer): HPalette;
+var
+  j: Integer;
+  palEntries: TMaxLogPalette;
+begin
+  {Prepares and fills the strucutre}
+  if Bitdepth = 16 then Bitdepth := 8;
+  fillchar(palEntries, sizeof(palEntries), 0);
+  palEntries.palVersion := $300;
+  palEntries.palNumEntries := 1 shl Bitdepth;
+  {Fill it with grayscale colors}
+  for j := 0 to palEntries.palNumEntries - 1 do
+  begin
+    palEntries.palPalEntry[j].peRed  :=
+      fOwner.GammaTable[MulDiv(j, 255, palEntries.palNumEntries - 1)];
+    palEntries.palPalEntry[j].peGreen := palEntries.palPalEntry[j].peRed;
+    palEntries.palPalEntry[j].peBlue := palEntries.palPalEntry[j].peRed;
+  end;
+  {Creates and returns the palette}
+  Result := CreatePalette(pLogPalette(@palEntries)^);
+
+end;
+
+{Copies the palette to the Device Independent bitmap header}
+procedure TChunkIHDR.PaletteToDIB(Palette: HPalette);
+var
+  Count, j: Integer;
+  palEntries: TMaxLogPalette;
+begin
+  {Copy colors}
+  Fillchar(palEntries, sizeof(palEntries), #0);
+  Count := GetPaletteEntries(Palette, 0, 256, palEntries.palPalEntry[0]);
+  for j := 0 to Count - 1 do
+  begin
+    BitmapInfo.bmiColors[j].rgbBlue := palEntries.palPalEntry[j].peBlue;
+    BitmapInfo.bmiColors[j].rgbRed := palEntries.palPalEntry[j].peRed;
+    BitmapInfo.bmiColors[j].rgbGreen := palEntries.palPalEntry[j].peGreen;
+  end;
+end;
+
 {Resizes the image data to fill the color type, bit depth, }
 {width and height parameters}
 procedure TChunkIHDR.PrepareImageData();
-
   {Set the bitmap info}
   procedure SetInfo(const Bitdepth: Integer; const Palette: Boolean);
   begin
 
     {Copy if the bitmap contain palette entries}
     HasPalette := Palette;
-    {Initialize the structure with zeros}
-    fillchar(BitmapInfo, sizeof(BitmapInfo), #0);
     {Fill the strucutre}
     with BitmapInfo.bmiHeader do
     begin
@@ -2295,19 +2385,31 @@ begin
   {Creates the image to hold the data, CreateDIBSection does a better}
   {work in allocating necessary memory}
   ImageDC := CreateCompatibleDC(0);
+  {$IFDEF UseDelphi}Self.Owner.Canvas.Handle := ImageDC;{$ENDIF}
+
+  {In case it is a palette image, create the palette}
+  if ColorType in [COLOR_PALETTE, COLOR_GRAYSCALE] then
+  begin
+    {Create a standard palette}
+    if ColorType = COLOR_PALETTE then
+      ImagePalette := CreateHalfTonePalette(ImageDC)
+    else
+      ImagePalette := CreateGrayscalePalette(Bitdepth);
+    ResizePalette(ImagePalette, 1 shl BitmapInfo.bmiHeader.biBitCount);
+    BitmapInfo.bmiHeader.biClrUsed := 1 shl BitmapInfo.bmiHeader.biBitCount;
+    SelectPalette(ImageDC, ImagePalette, False);
+    RealizePalette(ImageDC);
+    PaletteTODIB(ImagePalette);
+  end;
+
+  {Create the device independent bitmap}
   ImageHandle := CreateDIBSection(ImageDC, pBitmapInfo(@BitmapInfo)^,
     DIB_RGB_COLORS, ImageData, 0, 0);
+  SelectObject(ImageDC, ImageHandle);
 
-  {Clears the old palette (if any)}
-  with Owner do
-    if  TempPalette <> 0 then
-    begin
-      DeleteObject(TempPalette);
-      TempPalette := 0;
-    end {with Owner, if TempPalette <> 0};
 
   {Build array and allocate bytes for each row}
-  zeromemory(ImageData, BytesPerRow * Integer(Height));
+  fillchar(ImageData^, BytesPerRow * Integer(Height), 0);
 end;
 
 {TChunktRNS implementation}
@@ -2359,7 +2461,7 @@ begin
         LookColor.rgbGreen := GetGValue(Value);
         LookColor.rgbBlue := GetBValue(Value);
         {Look in the table for the entry}
-        for i := 0 to 255 do
+        for i := 0 to BitmapInfo.bmiHeader.biClrUsed - 1 do
           if CompareMem(@BitmapInfo.bmiColors[i], @LookColor, 3) then
             Break;
         {Fill the transparency table}
@@ -2376,6 +2478,7 @@ function TChunktRNS.GetTransparentColor: ColorRef;
 var
   PaletteChunk: TChunkPLTE;
   i: Integer;
+  Value: Byte;
 begin
   Result := 0; {Default: Unknown transparent color}
 
@@ -2383,10 +2486,14 @@ begin
   with Header do
     case ColorType of
       COLOR_GRAYSCALE:
-          Result := RGB(PaletteValues[0], PaletteValues[0],
-        PaletteValues[0]);
+      begin
+        Value := BitmapInfo.bmiColors[PaletteValues[1]].rgbRed;
+        Result := RGB(Value, Value, Value);
+      end;
       COLOR_RGB:
-          Result := RGB(PaletteValues[1], PaletteValues[3], PaletteValues[5]);
+        Result := RGB(fOwner.GammaTable[PaletteValues[1]],
+        fOwner.GammaTable[PaletteValues[3]],
+        fOwner.GammaTable[PaletteValues[5]]);
       COLOR_PALETTE:
       begin
         {Obtains the palette chunk}
@@ -2466,6 +2573,7 @@ procedure TChunkIDAT.PreparePalette;
 var
   Entries: Word;
   j      : Integer;
+  palEntries: TMaxLogPalette;
 begin
   {In case the image uses grayscale, build a grayscale palette}
   with Header do
@@ -2473,16 +2581,20 @@ begin
     begin
       {Calculate total number of palette entries}
       Entries := (1 shl Byte(BitmapInfo.bmiHeader.biBitCount));
+      Fillchar(palEntries, sizeof(palEntries), #0);
+      palEntries.palVersion := $300;
+      palEntries.palNumEntries := Entries;
 
       FOR j := 0 TO Entries - 1 DO
-        with BitmapInfo.bmiColors[j] do
+        with palEntries.palPalEntry[j] do
         begin
 
           {Calculate each palette entry}
-          rgbRed := fOwner.GammaTable[MulDiv(j, 255, Entries - 1)];
-          rgbGreen := rgbRed;
-          rgbBlue := rgbRed;
-        end {with BitmapInfo.bmiColors[j]}
+          peRed := fOwner.GammaTable[MulDiv(j, 255, Entries - 1)];
+          peGreen := peRed;
+          peBlue := peRed;
+        end {with BitmapInfo.bmiColors[j]};
+        Owner.SetPalette(CreatePalette(pLogPalette(@palEntries)^));
     end {if ColorType = COLOR_GRAYSCALE..., with Header}
 end;
 
@@ -4086,6 +4198,7 @@ type
 var
   j        : Integer;          {For the FOR}
   PalColor : pPalEntry;
+  palEntries: TMaxLogPalette;
 begin
   {Let ancestor load data and check CRC}
   Result := inherited LoadFromStream(Stream, ChunkName, Size);
@@ -4102,17 +4215,21 @@ begin
 
   {Fill array with the palette entries}
   fCount := Size div 3;
+  Fillchar(palEntries, sizeof(palEntries), #0);
+  palEntries.palVersion := $300;
+  palEntries.palNumEntries := fCount;
   PalColor := Data;
   FOR j := 0 TO fCount - 1 DO
-    with Header.BitmapInfo.bmiColors[j] do
+    with palEntries.palPalEntry[j] do
     begin
-      rgbRed  :=  Owner.GammaTable[PalColor.r];
-      rgbGreen := Owner.GammaTable[PalColor.g];
-      rgbBlue :=  Owner.GammaTable[PalColor.b];
-      rgbReserved := 0;
+      peRed  :=  Owner.GammaTable[PalColor.r];
+      peGreen := Owner.GammaTable[PalColor.g];
+      peBlue :=  Owner.GammaTable[PalColor.b];
+      peFlags := 0;
       {Move to next palette entry}
       inc(PalColor);
     end;
+  Owner.SetPalette(CreatePalette(pLogPalette(@palEntries)^));
 end;
 
 {Saves the PLTE chunk to a stream}
@@ -4120,21 +4237,27 @@ function TChunkPLTE.SaveToStream(Stream: TStream): Boolean;
 var
   J: Integer;
   DataPtr: pByte;
+  BitmapInfo: TMAXBITMAPINFO;
+  palEntries: TMaxLogPalette;
 begin
   {Adjust size to hold all the palette items}
+  if fCount = 0 then fCount := Header.BitmapInfo.bmiHeader.biClrUsed;
   ResizeData(fCount * 3);
+  {Get all the palette entries}
+  fillchar(palEntries, sizeof(palEntries), #0);
+  GetPaletteEntries(Header.ImagePalette, 0, 256, palEntries.palPalEntry[0]);
   {Copy pointer to data}
   DataPtr := fData;
 
   {Copy palette items}
-  with Header do
-    FOR j := 0 TO fCount - 1 DO
-      with BitmapInfo.bmiColors[j] do
-      begin
-        DataPtr^ := Owner.InverseGamma[rgbRed]; inc(DataPtr);
-        DataPtr^ := Owner.InverseGamma[rgbGreen]; inc(DataPtr);
-        DataPtr^ := Owner.InverseGamma[rgbBlue]; inc(DataPtr);
-      end {with BitmapInfo};
+  BitmapInfo := Header.BitmapInfo;
+  FOR j := 0 TO fCount - 1 DO
+    with palEntries.palPalEntry[j] do
+    begin
+      DataPtr^ := Owner.InverseGamma[peRed]; inc(DataPtr);
+      DataPtr^ := Owner.InverseGamma[peGreen]; inc(DataPtr);
+      DataPtr^ := Owner.InverseGamma[peBlue]; inc(DataPtr);
+    end {with BitmapInfo};
 
   {Let ancestor do the rest of the work}
   Result := inherited SaveToStream(Stream);
@@ -4259,6 +4382,40 @@ begin
   Chunks.Count := 0;
 end;
 
+{Portable Network Graphics object being created as a blank image}
+constructor TPNGObject.CreateBlank(ColorType, BitDepth: Cardinal;
+  cx, cy: Integer);
+var NewIHDR: TChunkIHDR;
+begin
+  {Calls creator}
+  Create;
+  {Checks if the parameters are ok}
+  if not (ColorType in [COLOR_GRAYSCALE, COLOR_RGB, COLOR_PALETTE,
+    COLOR_GRAYSCALEALPHA, COLOR_RGBALPHA]) or not (BitDepth in
+    [1,2,4,8, 16]) or ((ColorType = COLOR_PALETTE) and (BitDepth = 16)) or
+    ((ColorType = COLOR_RGB) and (BitDepth < 8)) then
+  begin
+    RaiseError(EPNGInvalidSpec, EInvalidSpec);
+    exit;
+  end;
+  if Bitdepth = 2 then Bitdepth := 4;
+
+  {Add the basis chunks}
+  InitializeGamma;
+  BeingCreated := True;
+  Chunks.Add(TChunkIEND);
+  NewIHDR := Chunks.Add(TChunkIHDR) as TChunkIHDR;
+  NewIHDR.IHDRData.ColorType := ColorType;
+  NewIHDR.IHDRData.BitDepth := BitDepth;
+  NewIHDR.IHDRData.Width := cx;
+  NewIHDR.IHDRData.Height := cy;
+  NewIHDR.PrepareImageData;
+  if ColorType = COLOR_PALETTE then
+    TChunkPLTE(Chunks.Add(TChunkPLTE)).fCount := 1 shl BitDepth;
+  Chunks.Add(TChunkIDAT);
+  BeingCreated := False;
+end;
+
 {Portable Network Graphics object being created}
 constructor TPngObject.Create;
 begin
@@ -4266,13 +4423,14 @@ begin
   inherited Create;
 
   {Initial properties}
-  TempPalette := 0;
+  {$IFDEF UseDelphi}fCanvas := TCanvas.Create;{$ENDIF}
   fFilters := [pfSub];
   fCompressionLevel := 7;
   fInterlaceMethod := imNone;
   fMaxIdatSize := High(Word);
   {Create chunklist object}
   fChunkList := TPngList.Create(Self);
+
 end;
 
 {Portable Network Graphics object being destroyed}
@@ -4281,8 +4439,7 @@ begin
   {Free object list}
   ClearChunks;
   fChunkList.Free;
-  {Free the temporary palette}
-  if TempPalette <> 0 then DeleteObject(TempPalette);
+  {$IFDEF UseDelphi}fCanvas.Free;{$ENDIF}
 
   {Call ancestor destroy}
   inherited Destroy;
@@ -4840,13 +4997,13 @@ end;
 {Changing height is not supported}
 procedure TPngObject.SetHeight(Value: Integer);
 begin
-  RaiseError(EPNGError, EPNGCannotChangeSizeText);
+  Resize(Width, Value)
 end;
 
 {Changing width is not supported}
 procedure TPngObject.SetWidth(Value: Integer);
 begin
-  RaiseError(EPNGError, EPNGCannotChangeSizeText);
+  Resize(Value, Height)
 end;
 
 {$IFDEF UseDelphi}
@@ -4955,7 +5112,6 @@ end;
 procedure TPngObject.AssignTo(Dest: TPersistent);
 {$IFDEF UseDelphi}
 var
-  DeskDC: HDC;
   TRNS: TChunkTRNS;
 {$ENDIF}
 begin
@@ -4967,22 +5123,9 @@ begin
   {In case the destination is a bitmap}
   else if (Dest is TBitmap) and HeaderPresent then
   begin
-    {Tests for the best pixelformat
-    case Header.BitmapInfo.bmiHeader.biBitCount of
-      1: TBitmap(Dest).PixelFormat := pf1Bit;
-      4: TBitmap(Dest).PixelFormat := pf4Bit;
-      8: TBitmap(Dest).PixelFormat := pf8Bit;
-     24: TBitmap(Dest).PixelFormat := pf24Bit;
-     32: TBitmap(Dest).PixelFormat := pf32Bit;
-    end {case Header.BitmapInfo.bmiHeader.biBitCount};
-
-    {Device context}
-    DeskDC := GetDC(0);
-    {Copy the data}
-    TBitmap(Dest).Handle := CreateDIBitmap(DeskDC,
-      Header.BitmapInfo.bmiHeader, CBM_INIT, Header.ImageData,
-      pBitmapInfo(@Header.BitmapInfo)^, DIB_RGB_COLORS);
-    ReleaseDC(0, DeskDC);
+    {Copies the handle using CopyImage API}
+    TBitmap(Dest).Handle := CopyImage(Header.ImageHandle, IMAGE_BITMAP,
+      0, 0, 0);
 
     {Copy transparency mode}
     if (TransparencyMode = ptmBit) then
@@ -5383,6 +5526,89 @@ begin
   PByteArray(png.Scanline[Y])^[X] := GetRValue(Value);
 end;
 
+{Resizes the PNG image}
+procedure TPngObject.Resize(const CX, CY: Integer);
+  function Min(const A, B: Integer): Integer;
+  begin
+    if A < B then Result := A else Result := B;
+  end;
+var
+  Header: TChunkIHDR;
+  Line, NewBytesPerRow: Integer;
+  NewHandle: HBitmap;
+  NewDC: HDC;
+  NewImageData: Pointer;
+  NewImageAlpha: Pointer;
+  NewImageExtra: Pointer;
+begin
+  if (CX > 0) and (CY > 0) then
+  begin
+    {Gets some actual information}
+    Header := Self.Header;
+
+    {Creates the new image}
+    NewDC := CreateCompatibleDC(Header.ImageDC);
+    Header.BitmapInfo.bmiHeader.biWidth := cx;
+    Header.BitmapInfo.bmiHeader.biHeight := cy;
+    NewHandle := CreateDIBSection(NewDC, pBitmapInfo(@Header.BitmapInfo)^,
+      DIB_RGB_COLORS, NewImageData, 0, 0);
+    SelectObject(NewDC, NewHandle);
+    {$IFDEF UseDelphi}Canvas.Handle := NewDC;{$ENDIF}
+    NewBytesPerRow := (((Header.BitmapInfo.bmiHeader.biBitCount * cx) + 31)
+      and not 31) div 8;
+
+    {Copies the image data}
+    for Line := 0 to Min(CY - 1, Height - 1) do
+      CopyMemory(Ptr(Longint(NewImageData) + (Longint(CY) - 1) *
+      NewBytesPerRow - (Line * NewBytesPerRow)), Scanline[Line],
+      Min(NewBytesPerRow, Header.BytesPerRow));
+
+    {Build array for alpha information, if necessary}
+    if (Header.ColorType = COLOR_RGBALPHA) or
+      (Header.ColorType = COLOR_GRAYSCALEALPHA) then
+    begin
+      GetMem(NewImageAlpha, CX * CY);
+      Fillchar(NewImageAlpha^, CX * CY, 255);
+      for Line := 0 to Min(CY - 1, Height - 1) do
+        CopyMemory(Ptr(Longint(NewImageAlpha) + (Line * CX)),
+        AlphaScanline[Line], Min(CX, Width));
+      FreeMem(Header.ImageAlpha);
+      Header.ImageAlpha := NewImageAlpha;
+    end;
+
+    {$IFDEF Store16bits}
+    if (Header.BitDepth = 16) then
+    begin
+      GetMem(NewImageExtra, CX * CY);
+      Fillchar(NewImageExtra^, CX * CY, 0);
+      for Line := 0 to Min(CY - 1, Height - 1) do
+        CopyMemory(Ptr(Longint(NewImageExtra) + (Line * CX)),
+        ExtraScanline[Line], Min(CX, Width));
+      FreeMem(Header.ExtraImageData);
+      Header.ExtraImageData := NewImageExtra;
+    end;
+    {$ENDIF}
+
+    {Deletes the old image}
+    DeleteObject(Header.ImageHandle);
+    DeleteDC(Header.ImageDC);
+
+    {Prepares the header to get the new image}
+    Header.BytesPerRow := NewBytesPerRow;
+    Header.IHDRData.Width := CX;
+    Header.IHDRData.Height := CY;
+    Header.ImageData := NewImageData;
+
+    {Replaces with the new image}
+    Header.ImageHandle := NewHandle;
+    Header.ImageDC := NewDC;
+  end
+  else
+    {The new size provided is invalid}
+    RaiseError(EPNGInvalidNewSize, EInvalidNewSize)
+
+end;
+
 {Sets a pixel}
 procedure TPngObject.SetPixels(const X, Y: Integer; const Value: TColor);
 begin
@@ -5419,33 +5645,8 @@ end;
 
 {Returns the image palette}
 function TPngObject.GetPalette: HPALETTE;
-var
-  LogPalette: TMaxLogPalette;
-  i: Integer;
 begin
-  {Palette is avaliable for COLOR_PALETTE and COLOR_GRAYSCALE modes}
-  if (Header.ColorType in [COLOR_PALETTE, COLOR_GRAYSCALE])  then
-  begin
-    {In case the pal}
-    if TempPalette = 0 then
-      with LogPalette do
-      begin
-        {Prepares the new palette}
-        palVersion := $300;
-        palNumEntries := 256;
-        {Copy entries}
-        for i := 0 to LogPalette.palNumEntries - 1 do
-        begin
-          palPalEntry[i].peRed := Header.BitmapInfo.bmiColors[i].rgbRed;
-          palPalEntry[i].peGreen := Header.BitmapInfo.bmiColors[i].rgbGreen;
-          palPalEntry[i].peBlue := Header.BitmapInfo.bmiColors[i].rgbBlue;
-          palPalEntry[i].peFlags := 0;
-        end {for i};
-        {Creates the palette}
-        TempPalette := CreatePalette(pLogPalette(@LogPalette)^);
-      end {with LogPalette, if Temppalette = 0}
-  end {if Header.ColorType in ...};
-  Result := TempPalette;
+  Result := Header.ImagePalette;
 end;
 
 {Assigns from another TChunk}
@@ -5491,16 +5692,28 @@ var
 begin
   {Palette is avaliable for COLOR_PALETTE and COLOR_GRAYSCALE modes}
   if (Header.ColorType in [COLOR_PALETTE, COLOR_GRAYSCALE])  then
-  begin
-    Count := GetPaletteEntries(Value, 0, 256, Entries);
-    for i := 0 to Count - 1
-    do begin
-       Header.BitmapInfo.bmiColors[i].rgbBlue := Entries[i].peBlue;
-       Header.BitmapInfo.bmiColors[i].rgbGreen := Entries[i].peGreen;
-       Header.BitmapInfo.bmiColors[i].rgbRed := Entries[i].peRed;
+    with Header do
+    begin
+      {Copy the palette entries}
+      fillchar(Entries, sizeof(Entries), #0);
+      Count := GetPaletteEntries(Value, 0, 256, Entries[0]);
+      for i := 0 to Count - 1 do
+      begin
+         BitmapInfo.bmiColors[i].rgbBlue := Entries[i].peBlue;
+         BitmapInfo.bmiColors[i].rgbGreen := Entries[i].peGreen;
+         BitmapInfo.bmiColors[i].rgbRed := Entries[i].peRed;
        end; {for i}
-    DeleteObject(TempPalette);
-  end {if Header.ColorType in ...};
+       BitmapInfo.bmiHeader.biClrUsed := Count;
+
+      {Resize the new palette}
+      SelectPalette(ImageDC, Value, False);
+      RealizePalette(ImageDC);
+
+      {Replaces}
+      ImagePalette := Value;
+      DeleteObject(ImagePalette)
+
+    end {with Header}{if Header.ColorType in ...};
 end;
 
 {Returns the library version}

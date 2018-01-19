@@ -51,9 +51,6 @@ resourcestring
     'poniewa¿ dekoder znalaz³ niespodziewanie koniec pliku.';
   EPNGNoImageDataText = 'Obraz "Portable Network Graphics" nie zawiera' +
     'danych.';
-  EPNGCannotChangeSizeText = 'Rozmiar obrazu "Portable Network Graphics" nie mo¿e ' +
-    'byæ zmieniony przez zmienne width i height. Spróbuj wyznaczyæ ' +
-    'obraz z bitmapy.';
   EPNGCannotAddChunkText = 'Program próbuje dodaæ krytyczn¹ ' +
     'stopkê do aktualnego obrazu co jest niedozwolone.';
   EPNGCannotAddInvalidImageText = 'Nie mo¿na dodaæ nowej stopki ' +
@@ -67,6 +64,9 @@ resourcestring
     '(COLOR_RGBALPHA i COLOR_GRAYSCALEALPHA)';
   EPNGHeaderNotPresentText = 'Ta operacja jest niedozwolona poniewa¿ ' +
     'aktualny obraz zawiera niew³aœciwy nag³ówek.';
+  EInvalidNewSize = 'The new size provided for image resizing is invalid.';
+  EInvalidSpec = 'The "Portable Network Graphics" could not be created ' +
+    'because invalid image type parameters have being provided.';
   {$ENDIF}
 
   {$IFDEF English}
@@ -104,9 +104,6 @@ resourcestring
     'because the decoder found an unexpected end of the file.';
   EPNGNoImageDataText = 'This "Portable Network Graphics" image contains no ' +
     'data.';
-  EPNGCannotChangeSizeText = 'The "Portable Network Graphics" image can not ' +
-    'be resize by changing width and height properties. Try assigning the ' +
-    'image from a bitmap.';
   EPNGCannotAddChunkText = 'The program tried to add a existent critical ' +
     'chunk to the current image which is not allowed.';
   EPNGCannotAddInvalidImageText = 'It''s not allowed to add a new chunk ' +
@@ -120,6 +117,9 @@ resourcestring
     '(COLOR_RGBALPHA and COLOR_GRAYSCALEALPHA)';
   EPNGHeaderNotPresentText = 'This operation is not valid because the ' +
     'current image contains no valid header.';
+  EInvalidNewSize = 'The new size provided for image resizing is invalid.';
+  EInvalidSpec = 'The "Portable Network Graphics" could not be created ' +
+    'because invalid image type parameters have being provided.';
   {$ENDIF}
   {$IFDEF Portuguese}
   EPngInvalidCRCText = 'Essa imagem "Portable Network Graphics" não é válida ' +
@@ -160,9 +160,6 @@ resourcestring
     'inválida porque o decodificador encontrou um fim inesperado.';
   EPNGNoImageDataText = 'Essa imagem "Portable Network Graphics" não contém ' +
     'dados.';
-  EPNGCannotChangeSizeText = 'A imagem "Portable Network Graphics" não pode ' +
-    'ser redimensionada mudando as propriedades width e height. Tente ' +
-    'copiar a imagem de um bitmap usando a função assign.';
   EPNGCannotAddChunkText = 'O programa tentou adicionar um chunk crítico ' +
     'já existente para a imagem atual, oque não é permitido.';
   EPNGCannotAddInvalidImageText = 'Não é permitido adicionar um chunk novo ' +
@@ -176,6 +173,10 @@ resourcestring
     '(COLOR_RGBALPHA e COLOR_GRAYSCALEALPHA)';
   EPNGHeaderNotPresentText = 'Essa operação não é válida porque a ' +
     'imagem atual não contém um cabeçalho válido.';
+  EInvalidNewSize = 'O novo tamanho fornecido para o redimensionamento de ' +
+    'imagem é inválido.';
+  EInvalidSpec = 'A imagem "Portable Network Graphics" não pode ser criada ' +
+    'porque parâmetros de tipo de imagem inválidos foram usados.';
   {$ENDIF}
   {Language strings for German}
   {$IFDEF German}
@@ -220,10 +221,6 @@ resourcestring
     'ungültig: Der Dekoder ist unerwartete auf das Ende der Datei gestoßen.';
   EPNGNoImageDataText = 'Dieses "Portable Network Graphics" Bild enthält ' +
     'keine Daten.';
-  EPNGCannotChangeSizeText = 'Das "Portable Network Graphics" Bild kann ' +
-    'nicht durch Ändern der Eigenschaften Width und Height in seinen ' +
-    'Abmessungen geändert werden. Versuchen Sie das Bild von einer Bitmap ' +
-    'aus zuzuweisen.';
   EPNGCannotAddChunkText = 'Das Programm versucht einen existierenden und ' +
     'notwendigen Abschnitt zum aktuellen Bild hinzuzufügen. Dies ist nicht ' +
     'zulässig.';
@@ -241,6 +238,9 @@ resourcestring
   EPNGHeaderNotPresentText = 'Die Datei, die gelesen wird, ist kein ' +
     'gültiges "Portable Network Graphics" Bild, da es keinen gültigen ' +
     'Header enthält.';
+  EInvalidNewSize = 'The new size provided for image resizing is invalid.';
+  EInvalidSpec = 'The "Portable Network Graphics" could not be created ' +
+    'because invalid image type parameters have being provided.';
   {$ENDIF}
   {Language strings for French}
   {$IFDEF French}
@@ -276,9 +276,6 @@ resourcestring
     'car le decodeur est arrivé à une fin de fichier non attendue.';
   EPNGNoImageDataText = 'Cette image "Portable Network Graphics" ne contient pas de ' +
     'données.';
-  EPNGCannotChangeSizeText = 'Cette image "Portable Network Graphics" ne peut pas ' +
-    'être retaillée en changeant ses propriétés width et height. Essayer d''assigner l''image depuis ' +
-    'un bitmap.';
   EPNGCannotAddChunkText = 'Le programme a essayé d''ajouter un morceau critique existant ' +
     'à l''image actuelle, ce qui n''est pas autorisé.';
   EPNGCannotAddInvalidImageText = 'Il n''est pas permis d''ajouter un nouveau morceau ' +
@@ -294,6 +291,9 @@ resourcestring
     'actuelle ne contient pas de header valide.';
   EPNGAlphaNotSupportedText = 'Le type de couleur de l''image "Portable Network Graphics" actuelle ' +
     'contient déjà des informations alpha ou il ne peut être converti.';
+  EInvalidNewSize = 'The new size provided for image resizing is invalid.';
+  EInvalidSpec = 'The "Portable Network Graphics" could not be created ' +
+    'because invalid image type parameters have being provided.';
   {$ENDIF}
   {Language strings for slovenian}
   {$IFDEF Slovenian}
@@ -331,9 +331,6 @@ resourcestring
     'ker je bralnik prišel do nepricakovanega konca datoteke.';
   EPNGNoImageDataText = 'Ta "Portable Network Graphics" ne vsebuje nobenih ' +
     'podatkov.';
-  EPNGCannotChangeSizeText = 'Te "Portable Network Graphics" sliki ne morem ' +
-    'spremeniti velikosti s spremembo lastnosti višine in širine. Poskusite ' +
-    'sliko prirediti v bitno sliko.';
   EPNGCannotAddChunkText = 'Program je poskusil dodati obstojeci kriticni ' +
     'kos podatkov k trenutni sliki, kar ni dovoljeno.';
   EPNGCannotAddInvalidImageText = 'Ni dovoljeno dodati nov kos podatkov, ' +
@@ -347,6 +344,9 @@ resourcestring
     '(COLOR_RGBALPHA and COLOR_GRAYSCALEALPHA)';
   EPNGHeaderNotPresentText = 'Ta operacija ni veljavna, ker ' +
     'izbrana slika ne vsebuje veljavne glave.';
+  EInvalidNewSize = 'The new size provided for image resizing is invalid.';
+  EInvalidSpec = 'The "Portable Network Graphics" could not be created ' +
+    'because invalid image type parameters have being provided.';
   {$ENDIF}
 
 
