@@ -1,16 +1,34 @@
-{Portable Network Graphics Delphi 1.5       (29 June 2005)    }
+{Portable Network Graphics Delphi 1.53      (14 April 2006)   }
 
-{This is the latest implementation for TPngImage component    }
-{It's meant to be a full replacement for the previous one.    }
-{There are lots of new improvements, including cleaner code,  }
-{full partial transparency support, speed improvements,       }
-{saving using ADAM 7 interlacing, better error handling, also }
-{the best compression for the final image ever. And now it's  }
-{truly able to read about any png image.                      }
+{This is a full, open sourced implementation for png in Delphi}
+{It has native support for most of png features including the }
+{partial transparency, gamma and more.                        }
+{For the latest version, please be sure to check my website   }
+{http://pngdelphi.sourceforge.net                             }
+{Gustavo Huffenbacher Daud (gustavo.daud@terra.com.br)        }
 
 {
+  Version 1.53
+  2006-04-14 -
+               BUG 1 - Remove transparency was not working for
+                       RGB Alpha and Grayscale alpha. fixed
+               BUG 2 - There was a bug were compressed text chunks no keyword
+                       name could not be read
+               IMPROVE 1 - Add classes and methods to work with the pHYs chunk
+                           (including TPNGObject.DrawUsingPixelInformation)
+               IMPROVE 3 - Included a property Version to return the library
+                           version
+               IMPROVE 4 - New polish translation (thanks to Piotr Domanski)
+               IMPROVE 5 - Now packages for delphi 5, 6, 7, 2005 and 2006
+
+               Also Martijn Saly (thany) made some improvements in the library:
+               IMPROVE 1 - SetPixel now works with grayscale
+               IMPROVE 2 - Palette property now can be written using a
+                           windows handle
+               Thanks !!
+
   Version 1.5
-  2005-29-06 - Fixed a lot of bugs using tips from mails that I´ve
+  2005-06-29 - Fixed a lot of bugs using tips from mails that I´ve
 	       being receiving for some time
                  BUG 1 - Loosing palette when assigning to TBitmap. fixed
                  BUG 2 - SetPixels and GetPixels worked only with
@@ -130,7 +148,8 @@ interface
 
 {Triggers avaliable (edit the fields bellow)}
 {$TYPEDADDRESS OFF}
-{$DEFINE UseDelphi}              //Disable fat vcl units (perfect to small apps)
+
+{$DEFINE UseDelphi}             //Disable fat vcl units (perfect to small apps)
 {$DEFINE ErrorOnUnknownCritical} //Error when finds an unknown critical chunk
 {$DEFINE CheckCRC}               //Enables CRC checking
 {$DEFINE RegisterGraphic}        //Registers TPNGObject to use with TPicture
@@ -144,6 +163,9 @@ interface
 uses
  Windows {$IFDEF UseDelphi}, Classes, Graphics, SysUtils{$ENDIF} {$IFDEF Debug},
  dialogs{$ENDIF}, pngzlib, pnglang;
+
+const
+  LibraryVersion = '1.53';
 
 {$IFNDEF UseDelphi}
   const
@@ -279,6 +301,8 @@ type
     {Used with property Item}
     function GetItem(Index: Cardinal): TChunk;
   public
+    {Finds the first item with this class}
+    function FindChunk(ChunkClass: TChunkClass): TChunk;
     {Removes an item}
     procedure RemoveChunk(Chunk: TChunk); overload;
     {Add a new chunk using the class from the parameter}
@@ -368,6 +392,7 @@ type
 
   {Forward}
   TChunkIHDR = class;
+  TChunkpHYs = class;
   {Interlace method}
   TInterlaceMethod = (imNone, imAdam7);
   {Compression level type}
@@ -399,20 +424,24 @@ type
     procedure ClearChunks;
     {Returns if header is present}
     function HeaderPresent: Boolean;
-    {Returns linesize and byte offset for pixels}
     procedure GetPixelInfo(var LineSize, Offset: Cardinal);
+    {Returns linesize and byte offset for pixels}
     procedure SetMaxIdatSize(const Value: Integer);
     function GetAlphaScanline(const LineIndex: Integer): pByteArray;
     function GetScanline(const LineIndex: Integer): Pointer;
     {$IFDEF Store16bits}
     function GetExtraScanline(const LineIndex: Integer): Pointer;
     {$ENDIF}
+    function GetPixelInformation: TChunkpHYs;
     function GetTransparencyMode: TPNGTransparencyMode;
     function GetTransparentColor: TColor;
     procedure SetTransparentColor(const Value: TColor);
+    {Returns the version}
+    function GetLibraryVersion: String;
   protected
-    {Returns the image palette}
+    {Returns / set the image palette}
     function GetPalette: HPALETTE; {$IFDEF UseDelphi}override;{$ENDIF}
+    procedure SetPalette(Value: HPALETTE); {$IFDEF UseDelphi}override;{$ENDIF}
     {Returns/sets image width and height}
     function GetWidth: Integer; {$IFDEF UseDelphi}override;{$ENDIF}
     function GetHeight: Integer; {$IFDEF UseDelphi}override; {$ENDIF}
@@ -460,7 +489,13 @@ type
     {$IFDEF Store16bits}
     property ExtraScanline[const Index: Integer]: Pointer read GetExtraScanline;
     {$ENDIF}
-    property AlphaScanline[const Index: Integer]: pByteArray read GetAlphaScanline;
+    {Used to return pixel information}
+    function HasPixelInformation: Boolean;
+    property PixelInformation: TChunkpHYs read GetPixelInformation;
+    property AlphaScanline[const Index: Integer]: pByteArray read
+      GetAlphaScanline;
+    procedure DrawUsingPixelInformation(Canvas: TCanvas; Point: TPoint);
+
     {Returns pointer to the header}
     property Header: TChunkIHDR read GetHeader;
     {Returns the transparency mode used by this png}
@@ -497,7 +532,8 @@ type
     destructor Destroy; override;
     {$IFNDEF UseDelphi}procedure LoadFromFile(const Filename: String);{$ENDIF}
     {$IFNDEF UseDelphi}procedure SaveToFile(const Filename: String);{$ENDIF}
-    procedure LoadFromStream(Stream: TStream); {$IFDEF UseDelphi}override;{$ENDIF}
+    procedure LoadFromStream(Stream: TStream);
+      {$IFDEF UseDelphi}override;{$ENDIF}
     procedure SaveToStream(Stream: TStream); {$IFDEF UseDelphi}override;{$ENDIF}
     {Loading the image from resources}
     procedure LoadFromResourceName(Instance: HInst; const Name: String);
@@ -505,7 +541,10 @@ type
     {Access to the png pixels}
     property Pixels[const X, Y: Integer]: TColor read GetPixels write SetPixels;
     {Palette property}
-    {$IFNDEF UseDelphi}property Palette: HPalette read GetPalette;{$ENDIF}
+    {$IFNDEF UseDelphi}property Palette: HPalette read GetPalette write
+      SetPalette;{$ENDIF}
+    {Returns the version}
+    property Version: String read GetLibraryVersion;
   end;
 
   {Chunk name object}
@@ -615,6 +654,27 @@ type
     {Destructor/constructor}
     constructor Create(Owner: TPngObject); override;
     destructor Destroy; override;
+    {Assigns from another TChunk}
+    procedure Assign(Source: TChunk); override;
+  end;
+
+  {pHYs chunk}
+  pUnitType = ^TUnitType;
+  TUnitType = (utUnknown, utMeter);
+  TChunkpHYs = class(TChunk)
+  private
+    fPPUnitX, fPPUnitY: Cardinal;
+    fUnit: TUnitType;
+  public
+    {Returns the properties}
+    property PPUnitX: Cardinal read fPPUnitX write fPPUnitX;
+    property PPUnitY: Cardinal read fPPUnitY write fPPUnitY;
+    property UnitType: TUnitType read fUnit write fUnit;
+    {Loads the chunk from a stream}
+    function LoadFromStream(Stream: TStream; const ChunkName: TChunkName;
+      Size: Integer): Boolean; override;
+    {Saves the chunk to a stream}
+    function SaveToStream(Stream: TStream): Boolean; override;
     {Assigns from another TChunk}
     procedure Assign(Source: TChunk); override;
   end;
@@ -1143,6 +1203,7 @@ begin
   RegisterChunk(TChunktRNS);
 
   {Not so important chunks}
+  RegisterChunk(TChunkpHYs);
   RegisterChunk(TChunktIME);
   RegisterChunk(TChunktEXt);
   RegisterChunk(TChunkzTXt);
@@ -1461,6 +1522,21 @@ end;
 
 {TPNGList implementation}
 
+{Finds the first chunk of this class}
+function TPNGList.FindChunk(ChunkClass: TChunkClass): TChunk;
+var
+  i: Integer;
+begin
+  Result := nil;
+  for i := 0 to Count - 1 do
+    if Item[i] is ChunkClass then
+    begin
+      Result := Item[i];
+      Break
+    end
+end;
+
+
 {Removes an item}
 procedure TPNGList.RemoveChunk(Chunk: TChunk);
 begin
@@ -1484,7 +1560,8 @@ begin
     fOwner.RaiseError(EPngError, EPNGCannotAddChunkText)
   {Two of these is not allowed}
   else if ((ChunkClass = TChunkgAMA) and (ItemFromClass(TChunkgAMA) <> nil)) or
-     ((ChunkClass = TChunktRNS) and (ItemFromClass(TChunktRNS) <> nil)) then
+     ((ChunkClass = TChunktRNS) and (ItemFromClass(TChunktRNS) <> nil)) or
+     ((ChunkClass = TChunkpHYs) and (ItemFromClass(TChunkpHYs) <> nil)) then
     fOwner.RaiseError(EPngError, EPNGCannotAddChunkText)
   {There must have an IEND and IHDR chunk}
   else if (ItemFromClass(TChunkIEND) = nil) or
@@ -1498,7 +1575,7 @@ begin
     {Create new chunk}
     Result := ChunkClass.Create(Owner);
     {Add to the list}
-    if (ChunkClass = TChunkgAMA) then
+    if (ChunkClass = TChunkgAMA) or (ChunkClass = TChunkpHYs) then
       Insert(Result, IHDR.Index + 1)
     {Transparency chunk (fix by Ian Boyd)}
     else if (ChunkClass = TChunktRNS) then
@@ -1920,7 +1997,10 @@ begin
   Result := inherited LoadFromStream(Stream, ChunkName, Size);
   if not Result or (Size < 4) then exit;
   fKeyword := PChar(Data);  {Get keyword and compression method bellow}
-  CompressionMethod := pByte(Longint(fKeyword) + Length(fKeyword))^;
+  if Longint(fKeyword) = 0 then
+    CompressionMethod := pByte(Data)^
+  else
+    CompressionMethod := pByte(Longint(fKeyword) + Length(fKeyword))^;
   fText := '';
 
   {In case the compression is 0 (only one accepted by specs), reads it}
@@ -2940,8 +3020,10 @@ begin
   {2 bits is not supported, this routine will converted into 4 bits}
   FOR i := 1 TO Row_Bytes do
   begin
-    Byte(Dest^) := ((Byte(Src^) shr 2) and $F) or ((Byte(Src^)) and $F0); inc(Dest);
-    Byte(Dest^) := ((Byte(Src^) shl 2) and $F) or ((Byte(Src^) shl 4) and $F0); inc(Dest);
+    Byte(Dest^) := ((Byte(Src^) shr 2) and $F) or ((Byte(Src^)) and $F0);
+      inc(Dest);
+    Byte(Dest^) := ((Byte(Src^) shl 2) and $F) or ((Byte(Src^) shl 4) and $F0);
+      inc(Dest);
     inc(Src);
   end {FOR i}
 end;
@@ -2955,8 +3037,10 @@ begin
   {2 bits is not supported, this routine will converted into 4 bits}
   FOR i := 1 TO Row_Bytes do
   begin
-    Byte(Dest^) := ((Byte(Src^) shr 4) and $3) or ((Byte(Src^) shr 2) and $30); inc(Dest);
-    Byte(Dest^) := (Byte(Src^) and $3) or ((Byte(Src^) shl 2) and $30); inc(Dest);
+    Byte(Dest^) := ((Byte(Src^) shr 4) and $3) or ((Byte(Src^) shr 2) and $30);
+      inc(Dest);
+    Byte(Dest^) := (Byte(Src^) and $3) or ((Byte(Src^) shl 2) and $30);
+      inc(Dest);
     inc(Src);
   end {FOR i}
 end;
@@ -4109,7 +4193,6 @@ begin
     Result := Exp(Exponent * Ln(Base));
 end;
 
-
 {Loading the chunk from a stream}
 function TChunkgAMA.LoadFromStream(Stream: TStream;
   const ChunkName: TChunkName; Size: Integer): Boolean;
@@ -4286,6 +4369,40 @@ begin
     fMaxIdatSize := High(Word) else fMaxIdatSize := Value;
 end;
 
+{Draws the image using pixel information from TChunkpHYs}
+procedure TPNGObject.DrawUsingPixelInformation(Canvas: TCanvas; Point: TPoint);
+  function Rect(Left, Top, Right, Bottom: Integer): TRect;
+  begin
+    Result.Left := Left;
+    Result.Top := Top;
+    Result.Right := Right;
+    Result.Bottom := Bottom;
+  end;
+var
+  PPMeterY, PPMeterX: Double;
+  NewSizeX, NewSizeY: Integer;
+  DC: HDC;
+begin
+  {Get system information}
+  DC := GetDC(0);
+  PPMeterY := GetDeviceCaps(DC, LOGPIXELSY) / 0.0254;
+  PPMeterX := GetDeviceCaps(DC, LOGPIXELSX) / 0.0254;
+  ReleaseDC(0, DC);
+
+  {In case it does not has pixel information}
+  if not HasPixelInformation then
+    Draw(Canvas, Rect(Point.X, Point.Y, Point.X + Width,
+      Point.Y + Height))
+  else
+    with PixelInformation do
+    begin
+      NewSizeX := Trunc(Self.Width / (PPUnitX / PPMeterX));
+      NewSizeY := Trunc(Self.Height / (PPUnitY / PPMeterY));
+      Draw(Canvas, Rect(Point.X, Point.Y, Point.X + NewSizeX,
+      Point.Y + NewSizeY));
+    end;
+end;
+
 {$IFNDEF UseDelphi}
   {Creates a file stream reading from the filename in the parameter and load}
   procedure TPngObject.LoadFromFile(const Filename: String);
@@ -4318,6 +4435,23 @@ end;
   end;
 
 {$ENDIF}
+
+{Returns if it has the pixel information chunk}
+function TPngObject.HasPixelInformation: Boolean;
+begin
+  Result := (Chunks.ItemFromClass(TChunkpHYs) as tChunkpHYs) <> nil;
+end;
+
+{Returns the pixel information chunk}
+function TPngObject.GetPixelInformation: TChunkpHYs;
+begin
+  Result := Chunks.ItemFromClass(TChunkpHYs) as tChunkpHYs;
+  if not Assigned(Result) then
+  begin
+    Result := Chunks.Add(tChunkpHYs) as tChunkpHYs;
+    Result.fUnit := utMeter;
+  end;
+end;
 
 {Returns pointer to the chunk TChunkIHDR which should be the first}
 function TPngObject.GetHeader: TChunkIHDR;
@@ -5030,8 +5164,28 @@ procedure TPngObject.RemoveTransparency;
 var
   TRNS: TChunkTRNS;
 begin
-  TRNS := Chunks.ItemFromClass(TChunkTRNS) as TChunkTRNS;
-  if TRNS <> nil then Chunks.RemoveChunk(TRNS)
+  {Removes depending on the color type}
+  with Header do
+    case ColorType of
+      {Palette uses the TChunktRNS to store alpha}
+      COLOR_PALETTE:
+      begin
+       TRNS := Chunks.ItemFromClass(TChunkTRNS) as TChunkTRNS;
+       if TRNS <> nil then Chunks.RemoveChunk(TRNS)
+      end;
+      {Png allocates different memory space to hold alpha information}
+      {for these types}
+      COLOR_GRAYSCALEALPHA, COLOR_RGBALPHA:
+      begin
+        {Transform into the appropriate color type}
+        if ColorType = COLOR_GRAYSCALEALPHA then
+          ColorType := COLOR_GRAYSCALE
+        else ColorType := COLOR_RGB;
+        {Free the pointer data}
+        if ImageAlpha <> nil then FreeMem(ImageAlpha);
+        ImageAlpha := nil
+      end
+    end
 end;
 
 {Generates alpha information}
@@ -5104,7 +5258,8 @@ begin
         if not Assigned(TRNS) then TRNS := Chunks.Add(TChunkTRNS) as TChunkTRNS;
 
         {Sets the transparency value from TRNS chunk}
-        TRNS.TransparentColor := {$IFDEF UseDelphi}ColorToRGB({$ENDIF}Value{$IFDEF UseDelphi}){$ENDIF}
+        TRNS.TransparentColor := {$IFDEF UseDelphi}ColorToRGB({$ENDIF}Value
+          {$IFDEF UseDelphi}){$ENDIF}
       end {COLOR_PALETTE, COLOR_RGB, COLOR_GRAYSCALE)}
     end {case}
 end;
@@ -5211,6 +5366,23 @@ begin
   end
 end;
 
+{Returns pixel when png uses grayscale}
+function GetGrayLinePixel(const png: TPngObject;
+  const X, Y: Integer): TColor;
+var
+  B: Byte;
+begin
+  B := PByteArray(png.Scanline[Y])^[X];
+  Result := RGB(B, B, B);
+end;
+
+{Sets pixel when png uses grayscale}
+procedure SetGrayLinePixel(const png: TPngObject;
+ const X, Y: Integer; Value: TColor);
+begin
+  PByteArray(png.Scanline[Y])^[X] := GetRValue(Value);
+end;
+
 {Sets a pixel}
 procedure TPngObject.SetPixels(const X, Y: Integer; const Value: TColor);
 begin
@@ -5220,6 +5392,8 @@ begin
     begin
       if ColorType in [COLOR_GRAYSCALE, COLOR_PALETTE] then
         SetByteArrayPixel(Self, X, Y, Value)
+      else if ColorType in [COLOR_GRAYSCALEALPHA] then
+        SetGrayLinePixel(Self, X, Y, Value)
       else
         SetRGBLinePixel(Self, X, Y, Value)
     end {with}
@@ -5235,6 +5409,8 @@ begin
     begin
       if ColorType in [COLOR_GRAYSCALE, COLOR_PALETTE] then
         Result := GetByteArrayPixel(Self, X, Y)
+      else if ColorType in [COLOR_GRAYSCALEALPHA] then
+        Result := GetGrayLinePixel(Self, X, Y)
       else
         Result := GetRGBLinePixel(Self, X, Y)
     end {with}
@@ -5270,6 +5446,67 @@ begin
       end {with LogPalette, if Temppalette = 0}
   end {if Header.ColorType in ...};
   Result := TempPalette;
+end;
+
+{Assigns from another TChunk}
+procedure TChunkpHYs.Assign(Source: TChunk);
+begin
+  fPPUnitY := TChunkpHYs(Source).fPPUnitY;
+  fPPUnitX := TChunkpHYs(Source).fPPUnitX;
+  fUnit := TChunkpHYs(Source).fUnit;
+end;
+
+{Loads the chunk from a stream}
+function TChunkpHYs.LoadFromStream(Stream: TStream; const ChunkName: TChunkName;
+  Size: Integer): Boolean;
+begin
+  {Let ancestor load the data}
+  Result := inherited LoadFromStream(Stream, ChunkName, Size);
+  if not Result or (Size <> 9) then exit; {Size must be 9}
+
+  {Reads data}
+  fPPUnitX := ByteSwap(pCardinal(Longint(Data))^);
+  fPPUnitY := ByteSwap(pCardinal(Longint(Data) + 4)^);
+  fUnit := pUnitType(Longint(Data) + 8)^;
+end;
+
+{Saves the chunk to a stream}
+function TChunkpHYs.SaveToStream(Stream: TStream): Boolean;
+begin
+  {Update data}
+  ResizeData(9);  {Make sure the size is 9}
+  pCardinal(Data)^ := ByteSwap(fPPUnitX);
+  pCardinal(Longint(Data) + 4)^ := ByteSwap(fPPUnitY);
+  pUnitType(Longint(Data) + 8)^ := fUnit;
+
+  {Let inherited save data}
+  Result := inherited SaveToStream(Stream);
+end;
+
+{Set palette based on a windows palette handle}
+procedure TPngObject.SetPalette(Value: HPALETTE);
+var
+  Count, i: Integer;
+  Entries: array[Byte] of TPaletteEntry;
+begin
+  {Palette is avaliable for COLOR_PALETTE and COLOR_GRAYSCALE modes}
+  if (Header.ColorType in [COLOR_PALETTE, COLOR_GRAYSCALE])  then
+  begin
+    Count := GetPaletteEntries(Value, 0, 256, Entries);
+    for i := 0 to Count - 1
+    do begin
+       Header.BitmapInfo.bmiColors[i].rgbBlue := Entries[i].peBlue;
+       Header.BitmapInfo.bmiColors[i].rgbGreen := Entries[i].peGreen;
+       Header.BitmapInfo.bmiColors[i].rgbRed := Entries[i].peRed;
+       end; {for i}
+    DeleteObject(TempPalette);
+  end {if Header.ColorType in ...};
+end;
+
+{Returns the library version}
+function TPNGObject.GetLibraryVersion: String;
+begin
+  Result := LibraryVersion
 end;
 
 initialization

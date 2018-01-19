@@ -8,6 +8,7 @@ unit pnglang;
 interface
 
 {$DEFINE English}
+{.$DEFINE Polish}
 {.$DEFINE Portuguese}
 {.$DEFINE German}
 {.$DEFINE French}
@@ -15,6 +16,59 @@ interface
 
 {Language strings for english}
 resourcestring
+  {$IFDEF Polish}
+  EPngInvalidCRCText = 'Ten obraz "Portable Network Graphics" jest nieprawid³owy ' +
+      'poniewa¿ zawiera on nieprawid³owe czêœci danych (b³¹d crc)';
+  EPNGInvalidIHDRText = 'Obraz "Portable Network Graphics" nie mo¿e zostaæ ' +
+      'wgrany poniewa¿ jedna z czêœci danych (ihdr) mo¿e byæ uszkodzona';
+  EPNGMissingMultipleIDATText = 'Obraz "Portable Network Graphics" jest ' +
+    'nieprawid³owy poniewa¿ brakuje w nim czêœci obrazu.';
+  EPNGZLIBErrorText = 'Nie mo¿na zdekompresowaæ obrazu poniewa¿ zawiera ' +
+    'b³êdnie zkompresowane dane.'#13#10 + ' Opis b³êdu: ';
+  EPNGInvalidPaletteText = 'Obraz "Portable Network Graphics" zawiera ' +
+    'niew³aœciw¹ paletê.';
+  EPNGInvalidFileHeaderText = 'Plik który jest odczytywany jest nieprawid³owym '+
+    'obrazem "Portable Network Graphics" poniewa¿ zawiera nieprawid³owy nag³ówek.' +
+    ' Plik mo¿ê byæ uszkodzony, spróbuj pobraæ go ponownie.';
+  EPNGIHDRNotFirstText = 'Obraz "Portable Network Graphics" nie jest ' +
+    'obs³ugiwany lub mo¿e byæ niew³aœciwy.'#13#10 + '(stopka IHDR nie jest pierwsza)';
+  EPNGNotExistsText = 'Plik png nie mo¿e zostaæ wgrany poniewa¿ nie ' +
+    'istnieje.';
+  EPNGSizeExceedsText = 'Obraz "Portable Network Graphics" nie jest ' +
+    'obs³ugiwany poniewa¿ jego szerokoœæ lub wysokoœæ przekracza maksimum ' +
+    'rozmiaru, który wynosi 65535 pikseli d³ugoœci.';
+  EPNGUnknownPalEntryText = 'Nie znaleziono wpisów palety.';
+  EPNGMissingPaletteText = 'Obraz "Portable Network Graphics" nie mo¿e zostaæ ' +
+    'wgrany poniewa¿ u¿ywa tabeli kolorów której brakuje.';
+  EPNGUnknownCriticalChunkText = 'Obraz "Portable Network Graphics" ' +
+    'zawiera nieznan¹ krytyczn¹ czêœæ która nie mo¿e zostaæ odkodowana.';
+  EPNGUnknownCompressionText = 'Obraz "Portable Network Graphics" jest ' +
+    'skompresowany nieznanym schemat który nie mo¿e zostaæ odszyfrowany.';
+  EPNGUnknownInterlaceText = 'Obraz "Portable Network Graphics" u¿ywa ' +
+    'nie znany schamat przeplatania który nie mo¿e zostaæ odszyfrowany.';
+  EPNGCannotAssignChunkText = 'Stopka mysi byæ kompatybilna aby zosta³a wyznaczona.';
+  EPNGUnexpectedEndText = 'Obraz "Portable Network Graphics" jest nieprawid³owy ' +
+    'poniewa¿ dekoder znalaz³ niespodziewanie koniec pliku.';
+  EPNGNoImageDataText = 'Obraz "Portable Network Graphics" nie zawiera' +
+    'danych.';
+  EPNGCannotChangeSizeText = 'Rozmiar obrazu "Portable Network Graphics" nie mo¿e ' +
+    'byæ zmieniony przez zmienne width i height. Spróbuj wyznaczyæ ' +
+    'obraz z bitmapy.';
+  EPNGCannotAddChunkText = 'Program próbuje dodaæ krytyczn¹ ' +
+    'stopkê do aktualnego obrazu co jest niedozwolone.';
+  EPNGCannotAddInvalidImageText = 'Nie mo¿na dodaæ nowej stopki ' +
+    'poniewa¿ aktualny obraz jest nieprawid³owy.';
+  EPNGCouldNotLoadResourceText = 'Obraz png nie mo¿e zostaæ za³adowany z' +
+    'zasobów o podanym ID.';
+  EPNGOutMemoryText = 'Niektóre operacje nie mog¹ zostaæ zrealizowane poniewa¿ ' +
+    'systemowi brakuje zasobów. Zamknij kilka okien i spróbuj ponownie.';
+  EPNGCannotChangeTransparentText = 'Ustawienie bitu przezroczystego koloru jest ' +
+    'zabronione dla obrazów png zawieraj¹cych wartoœæ alpha dla ka¿dego piksela ' +
+    '(COLOR_RGBALPHA i COLOR_GRAYSCALEALPHA)';
+  EPNGHeaderNotPresentText = 'Ta operacja jest niedozwolona poniewa¿ ' +
+    'aktualny obraz zawiera niew³aœciwy nag³ówek.';
+  {$ENDIF}
+
   {$IFDEF English}
   EPngInvalidCRCText = 'This "Portable Network Graphics" image is not valid ' +
       'because it contains invalid pieces of data (crc error)';
