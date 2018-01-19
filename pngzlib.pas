@@ -9,6 +9,7 @@ unit pngzlib;
 interface
 
 type
+
   TAlloc = function (AppData: Pointer; Items, Size: Integer): Pointer;
   TFree = procedure (AppData, Block: Pointer);
 
@@ -48,7 +49,6 @@ const
 
 function adler32(adler: Integer; buf: PChar; len: Integer): Integer;
 
-implementation
 
 const
   Z_NO_FLUSH      = 0;
@@ -95,10 +95,12 @@ const
     ''
   );
 
+implementation
+
 {$L obj\deflate.obj}
+{$L obj\trees.obj}
 {$L obj\inflate.obj}
 {$L obj\inftrees.obj}
-{$L obj\trees.obj}
 {$L obj\adler32.obj}
 {$L obj\infblock.obj}
 {$L obj\infcodes.obj}
@@ -137,7 +139,6 @@ begin
 end;
 
 
-
 // deflate compresses data
 function deflateInit_(var strm: TZStreamRec; level: Integer; version: PChar;
   recsize: Integer): Integer; external;
@@ -163,3 +164,6 @@ begin
 end;
 
 end.
+
+
+
