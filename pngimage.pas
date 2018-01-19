@@ -1,4 +1,4 @@
-{Portable Network Graphics Delphi 1.4361   (8 March 2003)     }
+{Portable Network Graphics Delphi 1.5       (29 June 2005)    }
 
 {This is the latest implementation for TPngImage component    }
 {It's meant to be a full replacement for the previous one.    }
@@ -9,6 +9,25 @@
 {truly able to read about any png image.                      }
 
 {
+  Version 1.5
+  2005-29-06 - Fixed a lot of bugs using tips from mails that I´ve
+	       being receiving for some time
+                 BUG 1 - Loosing palette when assigning to TBitmap. fixed
+                 BUG 2 - SetPixels and GetPixels worked only with
+                         parameters in range 0..255. fixed
+                 BUG 3 - Force type address off using directive
+                 BUG 4 - TChunkzTXt contained an error
+                 BUG 5 - MaxIdatSize was not working correctly (fixed thanks
+                 to Gabriel Corneanu
+                 BUG 6 - Corrected german translation (thanks to Mael Horz)
+               And the following improvements:
+                 IMPROVE 1 - Create ImageHandleValue properties as public in
+                             TChunkIHDR to get access to this handle
+                 IMPROVE 2 - Using SetStretchBltMode to improve stretch quality
+                 IMPROVE 3 - Scale is now working for alpha transparent images
+                 IMPROVE 4 - GammaTable propery is now public to support an
+                             article in the help file
+
   Version 1.4361
   2003-03-04 - Fixed important bug for simple transparency when using
                RGB, Grayscale color modes
@@ -110,12 +129,13 @@ unit pngimage;
 interface
 
 {Triggers avaliable (edit the fields bellow)}
+{$TYPEDADDRESS OFF}
 {$DEFINE UseDelphi}              //Disable fat vcl units (perfect to small apps)
 {$DEFINE ErrorOnUnknownCritical} //Error when finds an unknown critical chunk
 {$DEFINE CheckCRC}               //Enables CRC checking
 {$DEFINE RegisterGraphic}        //Registers TPNGObject to use with TPicture
 {$DEFINE PartialTransparentDraw} //Draws partial transparent images
-{.$DEFINE Store16bits}            //Stores the extra 8 bits from 16bits/sample
+{.$DEFINE Store16bits}           //Stores the extra 8 bits from 16bits/sample
 {.$DEFINE Debug}                 //For programming purposes
 {$RANGECHECKS OFF} {$J+}
 
@@ -359,8 +379,8 @@ type
   {Png implementation object}
   TPngObject = class{$IFDEF UseDelphi}(TGraphic){$ENDIF}
   protected
-    {Gamma table values}
-    GammaTable, InverseGamma: Array[Byte] of Byte;
+    {Inverse gamma table values}
+    InverseGamma: Array[Byte] of Byte;
     procedure InitializeGamma;
   private
     {Temporary palette}
@@ -370,7 +390,7 @@ type
     {Compression level for ZLIB}
     fCompressionLevel: TCompressionLevel;
     {Maximum size for IDAT chunks}
-    fMaxIdatSize: Cardinal;
+    fMaxIdatSize: Integer;
     {Returns if image is interlaced}
     fInterlaceMethod: TInterlaceMethod;
     {Chunks object}
@@ -381,7 +401,7 @@ type
     function HeaderPresent: Boolean;
     {Returns linesize and byte offset for pixels}
     procedure GetPixelInfo(var LineSize, Offset: Cardinal);
-    procedure SetMaxIdatSize(const Value: Cardinal);
+    procedure SetMaxIdatSize(const Value: Integer);
     function GetAlphaScanline(const LineIndex: Integer): pByteArray;
     function GetScanline(const LineIndex: Integer): Pointer;
     {$IFDEF Store16bits}
@@ -414,6 +434,8 @@ type
     function GetPixels(const X, Y: Integer): TColor; virtual;
     procedure SetPixels(const X, Y: Integer; const Value: TColor); virtual;
   public
+    {Gamma table array}
+    GammaTable: Array[Byte] of Byte;
     {Generates alpha information}
     procedure CreateAlpha;
     {Removes the image transparency}
@@ -462,7 +484,7 @@ type
     {Filters to test to encode}
     property Filters: TFilters read fFilters write fFilters;
     {Maximum size for IDAT chunks, default and minimum is 65536}
-    property MaxIdatSize: Cardinal read fMaxIdatSize write SetMaxIdatSize;
+    property MaxIdatSize: Integer read fMaxIdatSize write SetMaxIdatSize;
     {Property to return if the image is empty or not}
     property Empty: Boolean read GetEmpty;
     {Compression level}
@@ -554,7 +576,6 @@ type
     {Current image}
     ImageHandle: HBitmap;
     ImageDC: HDC;
-
     {Output windows bitmap}
     HasPalette: Boolean;
     BitmapInfo: TMaxBitmapInfo;
@@ -573,6 +594,8 @@ type
     {Release allocated ImageData memory}
     procedure FreeImageData;
   public
+    {Access to ImageHandle}
+    property ImageHandleValue: HBitmap read ImageHandle;
     {Properties}
     property Width: Cardinal read IHDRData.Width write IHDRData.Width;
     property Height: Cardinal read IHDRData.Height write IHDRData.Height;
@@ -3333,11 +3356,11 @@ begin
       if avail_out = 0 then
       begin
         {Writes this IDAT chunk}
-        WriteIDAT(fStream, Data, ZLIBAllocate);
+        WriteIDAT(fStream, Data, Owner.MaxIdatSize);
 
         {Restore buffer}
         next_out := Data;
-        avail_out := ZLIBAllocate;
+        avail_out := Owner.MaxIdatSize;
       end {if avail_out = 0};
 
     end {while avail_in};
@@ -3357,15 +3380,15 @@ begin
     while deflate(ZLIB,Z_FINISH) <> Z_STREAM_END do
     begin
       {Writes this IDAT chunk}
-      WriteIDAT(fStream, Data, ZLIBAllocate - avail_out);
+      WriteIDAT(fStream, Data, Owner.MaxIdatSize - avail_out);
       {Re-update buffer}
       next_out := Data;
-      avail_out := ZLIBAllocate;
+      avail_out := Owner.MaxIdatSize;
     end;
 
-    if avail_out < ZLIBAllocate then
+    if avail_out < Owner.MaxIdatSize then
       {Writes final IDAT}
-      WriteIDAT(fStream, Data, ZLIBAllocate - avail_out);
+      WriteIDAT(fStream, Data, Owner.MaxIdatSize - avail_out);
 
   end {with ZLIBStream, ZLIBStream.ZLIB};
 end;
@@ -3973,7 +3996,9 @@ function TChunkPLTE.LoadFromStream(Stream: TStream;
   const ChunkName: TChunkName; Size: Integer): Boolean;
 type
   pPalEntry = ^PalEntry;
-  PalEntry = record r, g, b: Byte end;
+  PalEntry = record
+    r, g, b: Byte;
+  end;
 var
   j        : Integer;          {For the FOR}
   PalColor : pPalEntry;
@@ -4001,7 +4026,8 @@ begin
       rgbGreen := Owner.GammaTable[PalColor.g];
       rgbBlue :=  Owner.GammaTable[PalColor.b];
       rgbReserved := 0;
-      inc(PalColor); {Move to next palette entry}
+      {Move to next palette entry}
+      inc(PalColor);
     end;
 end;
 
@@ -4121,8 +4147,11 @@ end;
 {Assigns from another object}
 procedure TPngObject.Assign(Source: TPersistent);
 begin
+  {Being cleared}
+  if Source = nil then
+    ClearChunks
   {Assigns contents from another TPNGObject}
-  if Source is TPNGObject then
+  else if Source is TPNGObject then
     AssignPNG(Source as TPNGObject)
   {Copy contents from a TBitmap}
   {$IFDEF UseDelphi}else if Source is TBitmap then
@@ -4250,7 +4279,7 @@ begin
 end;
 
 {Set the maximum size for IDAT chunk}
-procedure TPngObject.SetMaxIdatSize(const Value: Cardinal);
+procedure TPngObject.SetMaxIdatSize(const Value: Integer);
 begin
   {Make sure the size is at least 65535}
   if Value < High(Word) then
@@ -4306,6 +4335,25 @@ end;
 
 {Draws using partial transparency}
 procedure TPngObject.DrawPartialTrans(DC: HDC; Rect: TRect);
+  {Adjust the rectangle structure}
+  procedure AdjustRect(var Rect: TRect);
+  var
+    t: Integer;
+  begin
+    if Rect.Right < Rect.Left then
+    begin
+      t := Rect.Right;
+      Rect.Right := Rect.Left;
+      Rect.Left := t;
+    end;
+    if Rect.Bottom < Rect.Top then
+    begin
+      t := Rect.Bottom;
+      Rect.Bottom := Rect.Top;
+      Rect.Top := t;
+    end
+  end;
+
 type
   {Access to pixels}
   TPixelLine = Array[Word] of TRGBQuad;
@@ -4331,6 +4379,7 @@ var
   BufferBits  : Pointer;
   OldBitmap,
   BufferBitmap: HBitmap;
+  Header: TChunkIHDR;
 
   {Transparency/palette chunks}
   TransparencyChunk: TChunktRNS;
@@ -4343,15 +4392,31 @@ var
   BytesPerRowDest,
   BytesPerRowSrc,
   BytesPerRowAlpha: Integer;
-  ImageSource,
+  ImageSource, ImageSourceOrg,
   AlphaSource     : pByteArray;
   ImageData       : pPixelLine;
-  i, j            : Integer;
+  i, j, i2, j2    : Integer;
+
+  {For bitmap stretching}
+  W, H            : Cardinal;
+  Stretch         : Boolean;
+  FactorX, FactorY: Double;
 begin
+  {Prepares the rectangle structure to stretch draw}
+  if (Rect.Right = Rect.Left) or (Rect.Bottom = Rect.Top) then exit;
+  AdjustRect(Rect);
+  {Gets the width and height}
+  W := Rect.Right - Rect.Left;
+  H := Rect.Bottom - Rect.Top;
+  Header := Self.Header; {Fast access to header}
+  Stretch := (W <> Header.Width) or (H <> Header.Height);
+  if Stretch then FactorX := W / Header.Width else FactorX := 1;
+  if Stretch then FactorY := H / Header.Height else FactorY := 1;
+
   {Prepare to create the bitmap}
   Fillchar(BitmapInfo, sizeof(BitmapInfo), #0);
-  BitmapInfoHeader.biWidth := Header.Width;
-  BitmapInfoHeader.biHeight := -1 * Header.Height;
+  BitmapInfoHeader.biWidth := W;
+  BitmapInfoHeader.biHeight := -Integer(H);
   BitmapInfo.bmiHeader := BitmapInfoHeader;
 
   {Create the bitmap which will receive the background, the applied}
@@ -4373,12 +4438,11 @@ begin
   OldBitmap := SelectObject(BufferDC, BufferBitmap);
 
   {Draws the background on the buffer image}
-  StretchBlt(BufferDC, 0, 0, Header.Width, Header.height, DC, Rect.Left,
-    Rect.Top, Header.Width, Header.Height, SRCCOPY);
+  BitBlt(BufferDC, 0, 0, W, H, DC, Rect.Left, Rect.Top, SRCCOPY);
 
   {Obtain number of bytes for each row}
   BytesPerRowAlpha := Header.Width;
-  BytesPerRowDest := (((BitmapInfo.bmiHeader.biBitCount * Width) + 31)
+  BytesPerRowDest := (((BitmapInfo.bmiHeader.biBitCount * W) + 31)
     and not 31) div 8; {Number of bytes for each image row in destination}
   BytesPerRowSrc := (((Header.BitmapInfo.bmiHeader.biBitCount * Header.Width) +
     31) and not 31) div 8; {Number of bytes for each image row in source}
@@ -4388,48 +4452,62 @@ begin
   AlphaSource := Header.ImageAlpha;
   Longint(ImageSource) := Longint(Header.ImageData) +
     Header.BytesPerRow * Longint(Header.Height - 1);
+  ImageSourceOrg := ImageSource;
 
   case Header.BitmapInfo.bmiHeader.biBitCount of
     {R, G, B images}
     24:
-      FOR j := 1 TO Header.Height DO
+      FOR j := 1 TO H DO
       begin
         {Process all the pixels in this line}
-        FOR i := 0 TO Header.Width - 1 DO
-          with ImageData[i] do
-          begin
-            rgbRed := (255+ImageSource[2+i*3] * AlphaSource[i] + rgbRed * (255 -
-              AlphaSource[i])) shr 8;
-            rgbGreen := (255+ImageSource[1+i*3] * AlphaSource[i] + rgbGreen *
-              (255 - AlphaSource[i])) shr 8;
-            rgbBlue := (255+ImageSource[i*3] * AlphaSource[i] + rgbBlue *
-             (255 - AlphaSource[i])) shr 8;
+        FOR i := 0 TO W - 1 DO
+        begin
+          if Stretch then i2 := trunc(i / FactorX) else i2 := i;
+          {Optmize when we don´t have transparency}
+          if (AlphaSource[i2] <> 0) then
+            if (AlphaSource[i2] = 255) then
+              ImageData[i] := pRGBQuad(@ImageSource[i2 * 3])^
+            else
+              with ImageData[i] do
+              begin
+                rgbRed := (255+ImageSource[2+i2*3] * AlphaSource[i2] + rgbRed *
+                  (not AlphaSource[i2])) shr 8;
+                rgbGreen := (255+ImageSource[1+i2*3] * AlphaSource[i2] +
+                  rgbGreen * (not AlphaSource[i2])) shr 8;
+                rgbBlue := (255+ImageSource[i2*3] * AlphaSource[i2] + rgbBlue *
+                 (not AlphaSource[i2])) shr 8;
+            end;
           end;
 
         {Move pointers}
-        Longint(ImageData) := Longint(ImageData) + BytesPerRowDest;
-        Longint(ImageSource) := Longint(ImageSource) - BytesPerRowSrc;
-        Longint(AlphaSource) := Longint(AlphaSource) + BytesPerRowAlpha;
+        inc(Longint(ImageData), BytesPerRowDest);
+        if Stretch then j2 := trunc(j / FactorY) else j2 := j;
+        Longint(ImageSource) := Longint(ImageSourceOrg) - BytesPerRowSrc * j2;
+        Longint(AlphaSource) := Longint(Header.ImageAlpha) +
+          BytesPerRowAlpha * j2;
       end;
     {Palette images with 1 byte for each pixel}
     1,4,8: if Header.ColorType = COLOR_GRAYSCALEALPHA then
-      FOR j := 1 TO Header.Height DO
+      FOR j := 1 TO H DO
       begin
         {Process all the pixels in this line}
-        FOR i := 0 TO Header.Width - 1 DO
+        FOR i := 0 TO W - 1 DO
           with ImageData[i], Header.BitmapInfo do begin
-            rgbRed := (255 + ImageSource[i] * AlphaSource[i] +
-              rgbRed * (255 - AlphaSource[i])) shr 8;
-            rgbGreen := (255 + ImageSource[i] * AlphaSource[i] +
-              rgbGreen * (255 - AlphaSource[i])) shr 8;
-            rgbBlue := (255 + ImageSource[i] * AlphaSource[i] +
-              rgbBlue * (255 - AlphaSource[i])) shr 8;
+            if Stretch then i2 := trunc(i / FactorX) else i2 := i;
+            rgbRed := (255 + ImageSource[i2] * AlphaSource[i2] +
+              rgbRed * (255 - AlphaSource[i2])) shr 8;
+            rgbGreen := (255 + ImageSource[i2] * AlphaSource[i2] +
+              rgbGreen * (255 - AlphaSource[i2])) shr 8;
+            rgbBlue := (255 + ImageSource[i2] * AlphaSource[i2] +
+              rgbBlue * (255 - AlphaSource[i2])) shr 8;
           end;
 
         {Move pointers}
         Longint(ImageData) := Longint(ImageData) + BytesPerRowDest;
-        Longint(ImageSource) := Longint(ImageSource) - BytesPerRowSrc;
-        Longint(AlphaSource) := Longint(AlphaSource) + BytesPerRowAlpha;
+        if Stretch then j2 := trunc(j / FactorY) else j2 := j;
+        Longint(ImageSource) := Longint(ImageSourceOrg) - BytesPerRowSrc * j2;
+        Longint(AlphaSource) := Longint(Header.ImageAlpha) +
+          BytesPerRowAlpha * j2;
       end
     else {Palette images}
     begin
@@ -4437,12 +4515,14 @@ begin
       TransparencyChunk := TChunktRNS(Chunks.ItemFromClass(TChunktRNS));
       PaletteChunk := TChunkPLTE(Chunks.ItemFromClass(TChunkPLTE));
 
-      FOR j := 1 TO Header.Height DO
+      FOR j := 1 TO H DO
       begin
         {Process all the pixels in this line}
-        i := 0; Data := @ImageSource[0];
+        i := 0;
         repeat
           CurBit := 0;
+          if Stretch then i2 := trunc(i / FactorX) else i2 := i;
+          Data := @ImageSource[i2];
 
           repeat
             {Obtains the palette index}
@@ -4468,19 +4548,19 @@ begin
             inc(i); inc(CurBit, Header.BitmapInfo.bmiHeader.biBitCount);
           until CurBit >= 8;
           {Move to next source data}
-          inc(Data);
-        until i >= Integer(Header.Width);
+          //inc(Data);
+        until i >= Integer(W);
 
         {Move pointers}
         Longint(ImageData) := Longint(ImageData) + BytesPerRowDest;
-        Longint(ImageSource) := Longint(ImageSource) - BytesPerRowSrc;
+        if Stretch then j2 := trunc(j / FactorY) else j2 := j;
+        Longint(ImageSource) := Longint(ImageSourceOrg) - BytesPerRowSrc * j2;
       end
     end {Palette images}
   end {case Header.BitmapInfo.bmiHeader.biBitCount};
 
   {Draws the new bitmap on the foreground}
-  StretchBlt(DC, Rect.Left, Rect.Top, Header.Width, Header.Height, BufferDC,
-    0, 0, Header.Width, Header.Height, SRCCOPY);
+  BitBlt(DC, Rect.Left, Rect.Top, W, H, BufferDC, 0, 0, SRCCOPY);
 
   {Free bitmap}
   SelectObject(BufferDC, OldBitmap);
@@ -4494,7 +4574,7 @@ var
   Header: TChunkIHDR;
 begin
   {Quit in case there is no header, otherwise obtain it}
-  if (Chunks.Count = 0) or not (Chunks.GetItem(0) is TChunkIHDR) then Exit;
+  if Empty then Exit;
   Header := Chunks.GetItem(0) as TChunkIHDR;
 
   {Copy the data to the canvas}
@@ -4509,10 +4589,13 @@ begin
       {$IFDEF UseDelphi}ColorToRGB({$ENDIF}TransparentColor)
       {$IFDEF UseDelphi}){$ENDIF}
     else
+    begin
+      SetStretchBltMode(ACanvas{$IFDEF UseDelphi}.Handle{$ENDIF}, COLORONCOLOR);
       StretchDiBits(ACanvas{$IFDEF UseDelphi}.Handle{$ENDIF}, Rect.Left,
         Rect.Top, Rect.Right - Rect.Left, Rect.Bottom - Rect.Top, 0, 0,
         Header.Width, Header.Height, Header.ImageData,
         pBitmapInfo(@Header.BitmapInfo)^, DIB_RGB_COLORS, SRCCOPY)
+    end
   end {case}
 end;
 
@@ -4750,14 +4833,7 @@ begin
   {In case the destination is a bitmap}
   else if (Dest is TBitmap) and HeaderPresent then
   begin
-    {Device context}
-    DeskDC := GetDC(0);
-    {Copy the data}
-    TBitmap(Dest).Handle := CreateDIBitmap(DeskDC,
-      Header.BitmapInfo.bmiHeader, CBM_INIT, Header.ImageData,
-      pBitmapInfo(@Header.BitmapInfo)^, DIB_RGB_COLORS);
-    ReleaseDC(0, DeskDC);
-    {Tests for the best pixelformat}
+    {Tests for the best pixelformat
     case Header.BitmapInfo.bmiHeader.biBitCount of
       1: TBitmap(Dest).PixelFormat := pf1Bit;
       4: TBitmap(Dest).PixelFormat := pf4Bit;
@@ -4765,6 +4841,14 @@ begin
      24: TBitmap(Dest).PixelFormat := pf24Bit;
      32: TBitmap(Dest).PixelFormat := pf32Bit;
     end {case Header.BitmapInfo.bmiHeader.biBitCount};
+
+    {Device context}
+    DeskDC := GetDC(0);
+    {Copy the data}
+    TBitmap(Dest).Handle := CreateDIBitmap(DeskDC,
+      Header.BitmapInfo.bmiHeader, CBM_INIT, Header.ImageData,
+      pBitmapInfo(@Header.BitmapInfo)^, DIB_RGB_COLORS);
+    ReleaseDC(0, DeskDC);
 
     {Copy transparency mode}
     if (TransparencyMode = ptmBit) then
@@ -4936,7 +5020,7 @@ procedure TPngObject.AddzTXt(const Keyword, Text: String);
 var
   TextChunk: TChunkzTXt;
 begin
-  TextChunk := Chunks.Add(TChunkText) as TChunkzTXt;
+  TextChunk := Chunks.Add(TChunkzTXt) as TChunkzTXt;
   TextChunk.Keyword := Keyword;
   TextChunk.Text := Text;
 end;
@@ -5059,7 +5143,9 @@ begin
             GammaTable[rgbBlue]);
       COLOR_GRAYSCALE:
       begin
-        ByteData := GammaTable[ByteData * ((1 shl DataDepth) + 1)];
+        if BitDepth = 1
+        then ByteData := GammaTable[Byte(ByteData * 255)]
+        else ByteData := GammaTable[Byte(ByteData * ((1 shl DataDepth) + 1))];
         Result := rgb(ByteData, ByteData, ByteData);
       end;
       else Result := 0;
@@ -5128,7 +5214,8 @@ end;
 {Sets a pixel}
 procedure TPngObject.SetPixels(const X, Y: Integer; const Value: TColor);
 begin
-  if (X in [0..Width - 1]) and (Y in [0..Height - 1]) then
+  if ((X >= 0) and (X <= Width - 1)) and
+        ((Y >= 0) and (Y <= Height - 1)) then
     with Header do
     begin
       if ColorType in [COLOR_GRAYSCALE, COLOR_PALETTE] then
@@ -5138,10 +5225,12 @@ begin
     end {with}
 end;
 
+
 {Returns a pixel}
 function TPngObject.GetPixels(const X, Y: Integer): TColor;
 begin
-  if (X in [0..Width - 1]) and (Y in [0..Height - 1]) then
+  if ((X >= 0) and (X <= Width - 1)) and
+        ((Y >= 0) and (Y <= Height - 1)) then
     with Header do
     begin
       if ColorType in [COLOR_GRAYSCALE, COLOR_PALETTE] then

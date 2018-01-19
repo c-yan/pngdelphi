@@ -125,67 +125,67 @@ resourcestring
   {$ENDIF}
   {Language strings for German}
   {$IFDEF German}
-  EPngInvalidCRCText = 'Dieses "Portable Network Graphics" Image ist ' +
-      'ungültig, weil Teile der Daten ungültig sind (CRC-Fehler).';
-  EPNGInvalidIHDRText = 'Dieses "Portable Network Graphics" Image konnte ' +
-      'nicht geladen werden, weil eine der Hauptdaten (IHDR) beschädigt ' +
-      'sein könnte.';
-  EPNGMissingMultipleIDATText = 'Dieses "Portable Network Graphics" Image ' +
+  EPngInvalidCRCText = 'Dieses "Portable Network Graphics" Bild ist ' +
+      'ungültig, weil Teile der Daten fehlerhaft sind (CRC-Fehler)';
+  EPNGInvalidIHDRText = 'Dieses "Portable Network Graphics" Bild konnte ' +
+      'nicht geladen werden, weil wahrscheinlich einer der Hauptdatenbreiche ' +
+	  '(IHDR) beschädigt ist';
+  EPNGMissingMultipleIDATText = 'Dieses "Portable Network Graphics" Bild ' +
     'ist ungültig, weil Grafikdaten fehlen.';
-  EPNGZLIBErrorText = 'Die Grafik konnte nicht entpackt werden, weil sie ' +
-    'fehlerhafte komprimierte Daten enthält.'#13#10 + ' Beschreibung: ';
-  EPNGInvalidPaletteText = 'Das "Portable Network Graphics" Image enthält ' +
+  EPNGZLIBErrorText = 'Die Grafik konnte nicht entpackt werden, weil Teile der ' +
+    'komprimierten Daten fehlerhaft sind.'#13#10 + ' Beschreibung: ';
+  EPNGInvalidPaletteText = 'Das "Portable Network Graphics" Bild enthält ' +
     'eine ungültige Palette.';
   EPNGInvalidFileHeaderText = 'Die Datei, die gelesen wird, ist kein ' +
-    'gültiges "Portable Network Graphics" Image, da es keinen gültigen ' +
+    'gültiges "Portable Network Graphics" Bild, da es keinen gültigen ' +
     'Header enthält. Die Datei könnte beschädigt sein, versuchen Sie, ' +
     'eine neue Kopie zu bekommen.';
-  EPNGIHDRNotFirstText = 'Dieses "Portable Network Graphics" Image wird ' +
-    'nicht unterstützt bzw. es könnte ungültig sein.'#13#10 +
-    '(Der IHDR-Chunk ist nicht der erste Chunk in der Datei).';
+  EPNGIHDRNotFirstText = 'Dieses "Portable Network Graphics" Bild wird ' +
+    'nicht unterstützt oder ist ungültig.'#13#10 +
+    '(Der IHDR-Abschnitt ist nicht der erste Abschnitt in der Datei).';
   EPNGNotExistsText = 'Die PNG Datei konnte nicht geladen werden, da sie ' +
     'nicht existiert.';
-  EPNGSizeExceedsText = 'Dieses "Portable Network Graphics" Image wird nicht ' +
+  EPNGSizeExceedsText = 'Dieses "Portable Network Graphics" Bild wird nicht ' +
     'unterstützt, weil entweder seine Breite oder seine Höhe das Maximum von ' +
     '65535 Pixeln überschreitet.';
   EPNGUnknownPalEntryText = 'Es gibt keinen solchen Palettenwert.';
-  EPNGMissingPaletteText = 'Dieses "Portable Network Graphics" Image konnte ' +
+  EPNGMissingPaletteText = 'Dieses "Portable Network Graphics" Bild konnte ' +
     'nicht geladen werden, weil die benötigte Farbtabelle fehlt.';
-  EPNGUnknownCriticalChunkText = 'Dieses "Portable Network Graphics" Image ' +
-    'enhält einen unbekannten kritischen Teil, welcher nicht entschlüsselt ' +
+  EPNGUnknownCriticalChunkText = 'Dieses "Portable Network Graphics" Bild ' +
+    'enhält einen unbekannten aber notwendigen Teil, welcher nicht entschlüsselt ' +
     'werden kann.';
-  EPNGUnknownCompressionText = 'Dieses "Portable Network Graphics" Image ' +
+  EPNGUnknownCompressionText = 'Dieses "Portable Network Graphics" Bild ' +
     'wurde mit einem unbekannten Komprimierungsalgorithmus kodiert, welcher ' +
     'nicht entschlüsselt werden kann.';
-  EPNGUnknownInterlaceText = 'Dieses "Portable Network Graphics" Image ' +
-    'benutzt ein unbekanntes Interlace-Schema, welcher nicht entschlüsselt ' +
+  EPNGUnknownInterlaceText = 'Dieses "Portable Network Graphics" Bild ' +
+    'benutzt ein unbekanntes Interlace-Schema, welches nicht entschlüsselt ' +
     'werden kann.';
-  EPNGCannotAssignChunkText = 'Die Chunks müssen kompatibel sein, um ' +
-    'zugewiesen werden zu können.';
-  EPNGUnexpectedEndText = 'Dieses "Portable Network Graphics" Image ist ' +
-    'ungültig, der Dekoder stieß unerwarteterweise auf das Ende der Datei.';
-  EPNGNoImageDataText = 'Dieses "Portable Network Graphics" Image enthält ' +
+  EPNGCannotAssignChunkText = 'Die Abschnitte müssen kompatibel sein, damit ' +
+    'sie zugewiesen werden können.';
+  EPNGUnexpectedEndText = 'Dieses "Portable Network Graphics" Bild ist ' +
+    'ungültig: Der Dekoder ist unerwartete auf das Ende der Datei gestoßen.';
+  EPNGNoImageDataText = 'Dieses "Portable Network Graphics" Bild enthält ' +
     'keine Daten.';
-  EPNGCannotChangeSizeText = 'Das "Portable Network Graphics" Image kann ' +
+  EPNGCannotChangeSizeText = 'Das "Portable Network Graphics" Bild kann ' +
     'nicht durch Ändern der Eigenschaften Width und Height in seinen ' +
-    'Abmessungen geändert werden. Versuchen Sie das Image von einer Bitmap ' +
+    'Abmessungen geändert werden. Versuchen Sie das Bild von einer Bitmap ' +
     'aus zuzuweisen.';
-  EPNGCannotAddChunkText = 'Das Programm versucht einen existierenden ' +
-    'kritischen Chunk zum aktuellen Image hinzuzufügen. Dies ist nicht ' +
+  EPNGCannotAddChunkText = 'Das Programm versucht einen existierenden und ' +
+    'notwendigen Abschnitt zum aktuellen Bild hinzuzufügen. Dies ist nicht ' +
     'zulässig.';
-  EPNGCannotAddInvalidImageText = 'Es ist nicht zulässig, dem aktuellen ' +
-    'Image einen neuen Chunk hinzuzufügen, da es ungültig ist.';
-  EPNGCouldNotLoadResourceText = 'Das PNG Image konnte nicht von den ' +
+  EPNGCannotAddInvalidImageText = 'Es ist nicht zulässig, einem ungültigen ' +
+    'Bild einen neuen Abschnitt hinzuzufügen.';
+  EPNGCouldNotLoadResourceText = 'Das PNG Bild konnte nicht aus den ' +
     'Resourcendaten geladen werden.';
   EPNGOutMemoryText = 'Es stehen nicht genügend Resourcen im System zur ' +
     'Verfügung, um die Operation auszuführen. Schließen Sie einige Fenster '+
     'und versuchen Sie es erneut.';
   EPNGCannotChangeTransparentText = 'Das Setzen der Bit-' +
-    'Transparent-Farbe ist fuer PNG-Images die Alpha-Werte fuer jedes ' +
+    'Transparent-Farbe ist für PNG-Images die Alpha-Werte für jedes ' +
     'Pixel enthalten (COLOR_RGBALPHA und COLOR_GRAYSCALEALPHA) nicht ' +
-    'zulaessig';
+    'zulässig';
   EPNGHeaderNotPresentText = 'Die Datei, die gelesen wird, ist kein ' +
-    'gültiges "Portable Network Graphics" Image, da es keinen gültigen ' +
+    'gültiges "Portable Network Graphics" Bild, da es keinen gültigen ' +
     'Header enthält.';
   {$ENDIF}
   {Language strings for French}
