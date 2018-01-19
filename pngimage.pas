@@ -1,4 +1,4 @@
-{Portable Network Graphics Delphi 1.563      (25 July 2006)   }
+{Portable Network Graphics Delphi 1.564      (31 July 2006)   }
 
 {This is a full, open sourced implementation of png in Delphi }
 {It has native support for most of png features including the }
@@ -9,6 +9,16 @@
 
 
 {
+  Version 1.564
+  2006-07-25   BUG 1     - There was one GDI Palette object leak
+                           when assigning from other PNG (fixed)
+               BUG 2     - Loosing color information when assigning png
+                           to bmp on lower screen depth system
+               BUG 3     - There was a bug in TStream.GetSize
+                           (fixed thanks to Vladimir Panteleev)
+               IMPROVE 1 - When assigning png to bmp now alpha information
+                           is drawn (simulated into a white background)
+
   Version 1.563
   2006-07-25   BUG 1     - There was a memory bug in the main component
                            destructor (fixed thanks to Steven L Brenner)
@@ -135,7 +145,7 @@
                        TransparentColor
 
   Version 1.426
-  2002-07-18 - Clipboard finally fixed (hope)
+  2002-07-18 - Clipboard finally fixed and working
                Changed UseDelphi trigger to UseDelphi
                * NEW * Support for bit transparency bitmaps
                        when assigning from/to TBitmap objects
@@ -186,12 +196,12 @@ interface
 {Triggers avaliable (edit the fields bellow)}
 {$TYPEDADDRESS OFF}
 
-{$DEFINE UseDelphi}             //Disable fat vcl units (perfect to small apps)
+{$DEFINE UseDelphi}              //Disable fat vcl units(perfect for small apps)
 {$DEFINE ErrorOnUnknownCritical} //Error when finds an unknown critical chunk
 {$DEFINE CheckCRC}               //Enables CRC checking
 {$DEFINE RegisterGraphic}        //Registers TPNGObject to use with TPicture
 {$DEFINE PartialTransparentDraw} //Draws partial transparent images
-{$DEFINE Store16bits}           //Stores the extra 8 bits from 16bits/sample
+{$DEFINE Store16bits}            //Stores the extra 8 bits from 16bits/sample
 {$RANGECHECKS OFF} {$J+}
 
 
@@ -201,7 +211,7 @@ uses
  zlibpas, pnglang;
 
 const
-  LibraryVersion = '1.563';
+  LibraryVersion = '1.564';
 
 {$IFNDEF UseDelphi}
   const
@@ -1735,7 +1745,7 @@ function TStream.GetSize: Longint;
   begin
     Pos := Seek(0, soFromCurrent);
     Result := Seek(0, soFromEnd);
-    Seek(Pos, soFromCurrent);
+    Seek(Pos, soFromBeginning);
   end;
 
   {TFileStream implementation}
@@ -2171,12 +2181,13 @@ end;
 {Chunk being created}
 constructor TChunkIHDR.Create(Owner: TPngObject);
 begin
-  {Call inherited}
-  inherited Create(Owner);
   {Prepare pointers}
   ImageHandle := 0;
   ImagePalette := 0;
   ImageDC := 0;
+
+  {Call inherited}
+  inherited Create(Owner);
 end;
 
 {Chunk being destroyed}
@@ -2187,6 +2198,20 @@ begin
 
   {Calls TChunk destroy}
   inherited Destroy;
+end;
+
+{Copies the palette}
+procedure CopyPalette(Source: HPALETTE; Destination: HPALETTE);
+var
+  PaletteSize: Integer;
+  Entries: Array[Byte] of TPaletteEntry;
+begin
+  PaletteSize := 0;
+  if GetObject(Source, SizeOf(PaletteSize), @PaletteSize) = 0 then Exit;
+  if PaletteSize = 0 then Exit;
+  ResizePalette(Destination, PaletteSize);
+  GetPaletteEntries(Source, 0, PaletteSize, Entries);
+  SetPaletteEntries(Destination, 0, PaletteSize, Entries);
 end;
 
 {Assigns from another IHDR chunk}
@@ -2211,7 +2236,7 @@ begin
     {Copy palette colors}
     BitmapInfo.bmiColors := TChunkIHDR(Source).BitmapInfo.bmiColors;
     {Copy palette also}
-    ImagePalette := CopyPalette(TChunkIHDR(Source).ImagePalette);
+    CopyPalette(TChunkIHDR(Source).ImagePalette, ImagePalette);
   end
   else
     Owner.RaiseError(EPNGError, EPNGCannotAssignChunkText);
@@ -2229,7 +2254,7 @@ begin
   if ExtraImageData <> nil then FreeMem(ExtraImageData);
   {$ENDIF}
   ImageHandle := 0; ImageDC := 0; ImageAlpha := nil; ImageData := nil;
-  ImagePalette := 0;
+  ImagePalette := 0; ExtraImageData := nil;
 end;
 
 {Chunk being loaded from a stream}
@@ -4462,8 +4487,8 @@ begin
   {Free object list}
   ClearChunks;
   fChunkList.Free;
-  if fCanvas <> nil then
-    {$IFDEF UseDelphi}fCanvas.Free;{$ENDIF}
+  {$IFDEF UseDelphi}if fCanvas <> nil then
+    fCanvas.Free;{$ENDIF}
 
   {Call ancestor destroy}
   inherited Destroy;
@@ -5135,6 +5160,29 @@ end;
 {Assigns this tpngobject to another object}
 procedure TPngObject.AssignTo(Dest: TPersistent);
 {$IFDEF UseDelphi}
+  function DetectPixelFormat: TPixelFormat;
+  begin
+    with Header do
+    begin
+      {Always use 24bits for partial transparency}
+      if TransparencyMode = ptmPartial then
+        DetectPixelFormat := pf24bit
+      else
+        case BitDepth of
+          {Only supported by COLOR_PALETTE}
+          1: DetectPixelFormat := pf1bit;
+          2, 4: DetectPixelFormat := pf4bit;
+          {8 may be palette or r, g, b values}
+          8, 16:
+            case ColorType of
+              COLOR_RGB, COLOR_GRAYSCALE: DetectPixelFormat := pf24bit;
+              COLOR_PALETTE: DetectPixelFormat := pf8bit;
+              else raise Exception.Create('');
+            end {case ColorFormat of}
+          else raise Exception.Create('');
+        end {case BitDepth of}
+    end {with Header}
+  end;
 var
   TRNS: TChunkTRNS;
 {$ENDIF}
@@ -5148,8 +5196,10 @@ begin
   else if (Dest is TBitmap) and HeaderPresent then
   begin
     {Copies the handle using CopyImage API}
-    TBitmap(Dest).Handle := CopyImage(Header.ImageHandle, IMAGE_BITMAP,
-      0, 0, 0);
+    TBitmap(Dest).PixelFormat := DetectPixelFormat;
+    TBitmap(Dest).Width := Width;
+    TBitmap(Dest).Height := Height;
+    TBitmap(Dest).Canvas.Draw(0, 0, Self);
 
     {Copy transparency mode}
     if (TransparencyMode = ptmBit) then
@@ -5161,7 +5211,7 @@ begin
 
   end
   else
-    {Unknown destination kind, }
+    {Unknown destination kind}
     inherited AssignTo(Dest);
   {$ENDIF}
 end;
