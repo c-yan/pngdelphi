@@ -4,7 +4,7 @@
 {the library. It's now using the new ZLIB version, 1.1.4      }
 {Note: The .obj files must be located in the subdirectory \obj}
 
-unit pngzlib;
+unit zlibpas;
 
 interface
 
@@ -45,7 +45,7 @@ function deflate(var strm: TZStreamRec; flush: Integer): Integer; forward;
 function deflateEnd(var strm: TZStreamRec): Integer; forward;
 
 const
-  zlib_version = '1.1.4';
+  zlib_version = '1.2.3';
 
 
 const
